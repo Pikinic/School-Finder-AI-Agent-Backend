@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+coverage
+dist
+node_modules
+src/generated
+Microsoft
+contextB.md
+contextF.md
+package-lock.json
