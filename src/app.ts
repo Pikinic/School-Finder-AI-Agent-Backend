@@ -1,19 +1,32 @@
-import express, {Express} from 'express'
 import cors from 'cors'
 import cookieParser from 'cookie-parser'
+import express, { type Express } from 'express'
 import helmet from 'helmet'
-import env from "./config/env"
+import swaggerUi from 'swagger-ui-express'
+import env from './config/env'
+import { httpLogger } from './config/logger'
+import { openApiDocument } from './config/openapi'
+import { errorHandler } from './middleware/errorHandler'
+import { authRouter } from './modules/auth/auth.routes'
+import { requestId } from './middleware/requestId'
 
-const app:Express = express()
+const app: Express = express()
 
-app.use(cors())
-app.use(express.json())
+app.use(requestId)
+app.use(httpLogger)
+
+app.use(cors({ origin: true, credentials: true }))
+app.use(express.json({ limit: '1mb' }))
 app.use(cookieParser(env.cookieSecret))
 app.use(helmet())
 
+if (env.docsEnabled) {
+  app.get('/openapi.json', (_req, res) => res.json(openApiDocument))
+  app.use('/docs', swaggerUi.serve, swaggerUi.setup(openApiDocument))
+}
 
-app.get("/", (_, res)=>{
-    res.send("Hello World")
-})
+app.use(`/api/v1/auth`, authRouter)
+
+app.use(errorHandler)
 
 export default app

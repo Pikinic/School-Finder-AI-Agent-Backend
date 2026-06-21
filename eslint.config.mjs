@@ -11,6 +11,8 @@ export default tseslint.config(
       'node_modules/',
       'src/generated/',
       'Microsoft/',
+      'eslint.config.mjs',
+      'prettier.config.mjs',
     ],
   },
   eslint.configs.recommended,

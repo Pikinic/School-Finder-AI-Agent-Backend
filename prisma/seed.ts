@@ -40,7 +40,8 @@ function createPublicUserId(): string {
 }
 
 const main = async (): Promise<void> => { 
-  const userWithSeedEmail = await prisma.user.findUnique({
+  
+  const userWithSeedEmail = await prisma.users.findUnique({
     where: { email: config.SEED_ADMIN_EMAIL },
     select: { email: true, role: true, status: true },
   });
@@ -59,7 +60,7 @@ const main = async (): Promise<void> => {
     );
   }
 
-  const existingAdmin = await prisma.user.findFirst({
+  const existingAdmin = await prisma.users.findFirst({
     where: { role: "ADMIN" },
     select: { email: true },
   });
@@ -74,7 +75,7 @@ const main = async (): Promise<void> => {
     type: argon2.argon2id,
   });
 
-  const admin = await prisma.user.create({
+  const admin = await prisma.users.create({
     data: {
       public_id: createPublicUserId(),
       full_name: config.SEED_ADMIN_FULL_NAME,
