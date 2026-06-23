@@ -16,10 +16,13 @@ registry.registerComponent('securitySchemes', 'bearerAuth', {
 const errorResponseSchema = registry.register(
   'ErrorResponse',
   z.object({
-    message: z.string(),
-    code: z.string(),
-    requestId: z.string(),
-    details: z.unknown().optional(),
+    success: z.literal(false),
+    error: z.object({
+      message: z.string(),
+      code: z.string(),
+      requestId: z.string(),
+      details: z.unknown().optional(),
+    }),
   }),
 )
 
@@ -44,7 +47,32 @@ const loginResponseSchema = registry.register(
   }),
 )
 
+const refreshResponseSchema = registry.register(
+  'RefreshResponse',
+  z.object({
+    success: z.literal(true),
+    message: z.string(),
+    data: z.object({
+      accessToken: z.string(),
+    }),
+    meta: z.object({
+      requestId: z.string(),
+    }),
+  }),
+)
+
 const registeredLoginSchema = registry.register('LoginRequest', loginSchema)
+const refreshCookieParameter = z.object({
+  refreshToken: z
+    .string()
+    .length(128)
+    .openapi({
+      description: 'Opaque refresh token issued by login or refresh.',
+      param: {
+        description: 'Opaque refresh token issued by login or refresh.',
+      },
+    }),
+})
 
 registry.registerPath({
   method: 'post',
@@ -89,6 +117,61 @@ registry.registerPath({
     },
     401: {
       description: 'Invalid email or password.',
+      content: {
+        'application/json': {
+          schema: errorResponseSchema,
+        },
+      },
+    },
+    403: {
+      description: 'Account is not active.',
+      content: {
+        'application/json': {
+          schema: errorResponseSchema,
+        },
+      },
+    },
+  },
+})
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/v1/auth/refresh',
+  tags: ['Auth'],
+  summary: 'Refresh a staff access token',
+  description:
+    'Reads the opaque refresh token from the HttpOnly refreshToken cookie, validates the stored session, rotates the refresh-token hash on the same session row, sets a new refreshToken cookie, and returns a new short-lived access token.',
+  request: {
+    cookies: refreshCookieParameter,
+  },
+  responses: {
+    200: {
+      description:
+        'Refresh successful. The stored refresh-token hash is replaced and a rotated HttpOnly cookie is returned.',
+      headers: {
+        'Set-Cookie': {
+          schema: { type: 'string' },
+          description:
+            'Rotated HttpOnly refreshToken cookie; Secure in production.',
+        },
+      },
+      content: {
+        'application/json': {
+          schema: refreshResponseSchema,
+        },
+      },
+    },
+    400: {
+      description: 'Refresh cookie is missing or malformed.',
+      content: {
+        'application/json': {
+          schema: errorResponseSchema,
+        },
+      },
+    },
+    401: {
+      description:
+        'Refresh session was not found, expired, revoked, or failed fingerprint validation.',
       content: {
         'application/json': {
           schema: errorResponseSchema,

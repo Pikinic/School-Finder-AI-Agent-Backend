@@ -1,7 +1,7 @@
 import crypto from 'node:crypto'
 import { createError } from '../errors/AppError'
 
-export const hashRefreshToken =  async (token: string) => {
+export const hashRefreshToken = (token: string) => {
   try {
     return crypto.createHash('sha256').update(token).digest('hex')
   } catch (err) {

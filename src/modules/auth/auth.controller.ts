@@ -1,17 +1,13 @@
 import type { NextFunction, Request, Response } from 'express'
-import env from '../../config/env'
 import { successResponse } from '../../http/response'
-import AuthService from './auth.service'
 import { setCookie } from '../../http/cookie'
-
-
+import AuthService from './auth.service'
+import type { LoginT, RefreshT } from './auth.types'
 
 class AuthController {
   static Login = async (req: Request, res: Response, next: NextFunction) => {
     try {
-       const loginUser = await AuthService.Login(
-       req.body 
-      )
+      const loginUser = await AuthService.Login(req.body as LoginT)
 
       setCookie(res, loginUser.refreshToken)
       res.status(200).send(
@@ -23,17 +19,25 @@ class AuthController {
       next(err)
     }
   }
-  static Refresh = async (req:Request, res:Response, next:NextFunction)=> {
-    try{
-       const refreshToken = await AuthService.Refresh(req.body)
+
+  static Refresh = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const refreshToken = await AuthService.Refresh(req.body as RefreshT)
       setCookie(res, refreshToken.newRefreshToken)
-      res.status(200).send(successResponse(true, 'Refresh successful',  {accessToken: refreshToken.accessToken}))
-    }catch(error){
-        next(error)
+      res
+        .status(200)
+        .send(
+          successResponse(
+            true,
+            'Refresh successful',
+            { accessToken: refreshToken.accessToken },
+            { requestId: req.id },
+          ),
+        )
+    } catch (error) {
+      next(error)
     }
-
   }
-
 }
 
 export default AuthController

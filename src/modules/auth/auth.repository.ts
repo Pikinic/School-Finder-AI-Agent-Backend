@@ -1,12 +1,11 @@
 import { createError } from '../../common/errors/AppError'
 import prisma from '../../database/prisma'
-import type { AuthSessionDbData } from './auth.types'
+import type { AuthSessionDbData, RotateRefreshTokenData } from './auth.types'
 
 class AuthRepo {
-  static async findUser(where:{email?:string, id?:string}) {
+  static async findUser(where: { email?: string; id?: string }) {
     const user = await prisma.users.findFirst({
-       where,
-      
+      where,
     })
 
     return user
@@ -45,19 +44,32 @@ class AuthRepo {
       data: { last_login_at: new Date() },
     })
   }
-  static async findAuthSession(hashedRefreshToken:string){
-    const authSession =  await prisma.auth_Sessions.findFirst({
-      where:{refresh_token_hash: hashedRefreshToken},
-      
-     })
-    return authSession
-  }
-  static async updateRefreshToken (data:{auth_id:string, hashedRefreshToken:string}){
-    await prisma.auth_Sessions.update({
-      where:{id:data.auth_id},
-      data:{refresh_token_hash:data.hashedRefreshToken}
+  static async findAuthSession(hashedRefreshToken: string) {
+    const authSession = await prisma.auth_Sessions.findUnique({
+      where: { refresh_token_hash: hashedRefreshToken },
     })
 
+    return authSession
+  }
+
+  static async rotateRefreshToken(data: RotateRefreshTokenData) {
+    return prisma.auth_Sessions.update({
+      where: { id: data.authSessionId },
+      data: {
+        refresh_token_hash: data.hashedRefreshToken,
+        last_used_at: data.lastUsedAt,
+      },
+    })
+  }
+
+  static async revokeAuthSessionFamily(tokenFamily: string) {
+    await prisma.auth_Sessions.updateMany({
+      where: {
+        token_family: tokenFamily,
+        revoked_at: null,
+      },
+      data: { revoked_at: new Date() },
+    })
   }
 }
 

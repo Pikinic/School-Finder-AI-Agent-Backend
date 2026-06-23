@@ -6,15 +6,13 @@ import {
   generateAcessToken,
   generateRefreshToken,
 } from '../../common/security/token'
-import { hashRefreshToken} from '../../common/security/tokenHash'
+import { hashRefreshToken } from '../../common/security/tokenHash'
 import AuthRepo from './auth.repository'
-import type { AuthSessionDbData, LoginT } from './auth.types'
+import type { AuthSessionDbData, LoginT, RefreshT } from './auth.types'
 
 class AuthService {
-  static Login = async (
-    requestBody:LoginT
-  ) => {
-    const user = await AuthRepo.findUser({email: requestBody.email})
+  static Login = async (requestBody: LoginT) => {
+    const user = await AuthRepo.findUser({ email: requestBody.email })
 
     if (!user?.password_hash) {
       throw createError(
@@ -49,7 +47,7 @@ class AuthService {
     }
 
     const refreshToken = generateRefreshToken()
-    const refreshTokenHash = await hashRefreshToken(refreshToken)
+    const refreshTokenHash = hashRefreshToken(refreshToken)
     const tokenFamily = randomUUID()
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
 
@@ -57,7 +55,7 @@ class AuthService {
       user_id: user.id,
       refreshTokenHash,
       tokenFamily,
-      userAgent:requestBody.userAgent,
+      userAgent: requestBody.userAgent,
       ipAddress: requestBody.ipAddress,
       expiresAt,
     }
@@ -83,43 +81,46 @@ class AuthService {
       },
     }
 
-    return { data, refreshToken}
+    return { data, refreshToken }
   }
 
-  static Refresh = async (data:{refreshToken:string, ipAddress:string, userAgent:string})=>{
-    const hashedRefreshToken  =  await hashRefreshToken(data.refreshToken) //we hash incoming refresh Token
-     const authSession = await AuthRepo.findAuthSession(hashedRefreshToken) // Find auth session
-     if(!authSession?.refresh_token_hash){
-        throw createError(
+  static Refresh = async (data: RefreshT) => {
+    const hashedRefreshToken = hashRefreshToken(data.refreshToken)
+    const authSession = await AuthRepo.findAuthSession(hashedRefreshToken)
+
+    if (!authSession?.refresh_token_hash) {
+      throw createError(
         'Authentication session not found or has expired',
         401,
         {},
         AUTH_ERROR_CODES.AUTH_SESSION_NOT_FOUND,
       )
-     }
-    
-     const authExpiryDate = new Date(authSession.expires_at)
-     if(authExpiryDate <= new Date()){
-           throw createError(
+    }
+
+    const authExpiryDate = new Date(authSession.expires_at)
+    if (authExpiryDate <= new Date()) {
+      await AuthRepo.revokeAuthSessionFamily(authSession.token_family)
+      throw createError(
         'Authentication session has expired, please log in again',
         401,
         {},
-        'AUTH_SESSION_EXPIRED',
-      )
-     }
-
-    if(authSession.revoked_at){
-       throw createError(
-        'Authentication session revoked, please log in again',
-        401,
-        {},
-        'AUTH_SESSION_REVOKED',
+        AUTH_ERROR_CODES.AUTH_SESSION_EXPIRED,
       )
     }
 
-    const user = await AuthRepo.findUser({id:authSession.user_id})
-    if(user?.status !=  "ACTIVE"){
-        throw createError(
+    if (authSession.revoked_at) {
+      await AuthRepo.revokeAuthSessionFamily(authSession.token_family)
+      throw createError(
+        'Authentication session revoked, please log in again',
+        401,
+        {},
+        AUTH_ERROR_CODES.AUTH_SESSION_REVOKED,
+      )
+    }
+
+    const user = await AuthRepo.findUser({ id: authSession.user_id })
+    if (user?.status !== 'ACTIVE') {
+      throw createError(
         'Account is not active',
         403,
         {},
@@ -127,27 +128,37 @@ class AuthService {
       )
     }
 
-    if(authSession.ip_address != data.ipAddress && authSession.user_agent != data.userAgent){
-       throw createError(
+    if (
+      authSession.ip_address !== data.ipAddress ||
+      authSession.user_agent !== data.userAgent
+    ) {
+      await AuthRepo.revokeAuthSessionFamily(authSession.token_family)
+      throw createError(
         'Session device mismatch detected. Please log in again.',
         401,
         {},
-       'AUTH_SESSION_DEVICE_MISMATCH',
+        AUTH_ERROR_CODES.AUTH_SESSION_DEVICE_MISMATCH,
       )
     }
-    
-   
-  const accessToken = generateAcessToken(user.id, authSession.id, user.role, user.token_version)
-  const newRefreshToken =  generateRefreshToken()
-  const newHashedRefreshToken = await hashRefreshToken(newRefreshToken)
 
-  const updateRefreshToken =  AuthRepo.updateRefreshToken({auth_id:authSession.id, hashedRefreshToken:newHashedRefreshToken})
-  return {newRefreshToken, accessToken}
-  
-}
+    const newRefreshToken = generateRefreshToken()
+    const newHashedRefreshToken = hashRefreshToken(newRefreshToken)
 
+    const rotateAuthSession = await AuthRepo.rotateRefreshToken({
+      authSessionId: authSession.id,
+      lastUsedAt: new Date(),
+      hashedRefreshToken: newHashedRefreshToken,
+    })
 
+    const accessToken = generateAcessToken(
+      user.id,
+      rotateAuthSession.id,
+      user.role,
+      user.token_version,
+    )
 
+    return { newRefreshToken, accessToken }
+  }
 }
 
 export default AuthService

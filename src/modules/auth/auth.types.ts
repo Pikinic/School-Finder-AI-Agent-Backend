@@ -1,10 +1,16 @@
-interface LoginT  {
-  email: string
-  password: string
-  ipAddress: string,
-   userAgent:string
+interface ClientInfo {
+  ipAddress: string | null
+  userAgent: string | null
 }
 
+interface LoginT extends ClientInfo {
+  email: string
+  password: string
+}
+
+type RefreshT = ClientInfo & {
+  refreshToken: string
+}
 
 type AuthSessionDbData = {
   user_id: string
@@ -14,4 +20,11 @@ type AuthSessionDbData = {
   ipAddress: string | null
   expiresAt: Date
 }
-export { LoginT, AuthSessionDbData }
+
+type RotateRefreshTokenData = {
+  authSessionId: string
+  lastUsedAt: Date
+  hashedRefreshToken: string
+}
+
+export { LoginT, RefreshT, AuthSessionDbData, RotateRefreshTokenData }
