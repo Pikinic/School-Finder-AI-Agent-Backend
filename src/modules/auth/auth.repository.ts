@@ -3,9 +3,10 @@ import prisma from '../../database/prisma'
 import type { AuthSessionDbData } from './auth.types'
 
 class AuthRepo {
-  static async findUser(email: string) {
-    const user = await prisma.users.findUnique({
-      where: { email },
+  static async findUser(where:{email?:string, id?:string}) {
+    const user = await prisma.users.findFirst({
+       where,
+      
     })
 
     return user
@@ -43,6 +44,20 @@ class AuthRepo {
       where: { id: userId },
       data: { last_login_at: new Date() },
     })
+  }
+  static async findAuthSession(hashedRefreshToken:string){
+    const authSession =  await prisma.auth_Sessions.findFirst({
+      where:{refresh_token_hash: hashedRefreshToken},
+      
+     })
+    return authSession
+  }
+  static async updateRefreshToken (data:{auth_id:string, hashedRefreshToken:string}){
+    await prisma.auth_Sessions.update({
+      where:{id:data.auth_id},
+      data:{refresh_token_hash:data.hashedRefreshToken}
+    })
+
   }
 }
 

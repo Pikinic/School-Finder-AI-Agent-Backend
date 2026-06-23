@@ -12,4 +12,8 @@ const forgetPasswordSchema = z.object({
   email: z.string().trim().min(2).max(160).email(),
 })
 
-export { loginSchema, forgetPasswordSchema }
+const refreshTokenSchema = z.object({
+  refreshToken:z.string().trim().length(128)
+})
+
+export { loginSchema, forgetPasswordSchema, refreshTokenSchema }

@@ -2,26 +2,18 @@ import type { NextFunction, Request, Response } from 'express'
 import env from '../../config/env'
 import { successResponse } from '../../http/response'
 import AuthService from './auth.service'
-import type { LoginT } from './auth.types'
+import { setCookie } from '../../http/cookie'
+
+
 
 class AuthController {
   static Login = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const userAgent = req.headers['user-agent'] ?? null
-      const ipAddress = req.ip ?? null
-      const loginUser = await AuthService.Login(
-        req.body as LoginT,
-        userAgent,
-        ipAddress,
+       const loginUser = await AuthService.Login(
+       req.body 
       )
 
-      res.cookie('refreshToken', loginUser.refreshToken, {
-        httpOnly: true,
-        secure: env.nodeEnv === 'production',
-        sameSite: 'strict',
-        maxAge: 1000 * 60 * 60 * 24 * 30,
-      })
-
+      setCookie(res, loginUser.refreshToken)
       res.status(200).send(
         successResponse(true, 'Login successful', loginUser.data, {
           requestId: req.id,
@@ -31,6 +23,17 @@ class AuthController {
       next(err)
     }
   }
+  static Refresh = async (req:Request, res:Response, next:NextFunction)=> {
+    try{
+       const refreshToken = await AuthService.Refresh(req.body)
+      setCookie(res, refreshToken.newRefreshToken)
+      res.status(200).send(successResponse(true, 'Refresh successful',  {accessToken: refreshToken.accessToken}))
+    }catch(error){
+        next(error)
+    }
+
+  }
+
 }
 
 export default AuthController

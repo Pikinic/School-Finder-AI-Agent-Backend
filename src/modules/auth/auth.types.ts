@@ -1,7 +1,10 @@
-type LoginT = {
+interface LoginT  {
   email: string
   password: string
+  ipAddress: string,
+   userAgent:string
 }
+
 
 type AuthSessionDbData = {
   user_id: string

@@ -34,7 +34,7 @@ const authRepoMock = vi.mocked(AuthRepo)
 const verifyPasswordMock = vi.mocked(verifyPassword)
 const generateAcessTokenMock = vi.mocked(generateAcessToken)
 const generateRefreshTokenMock = vi.mocked(generateRefreshToken)
-const hashRefreshTokenMock = vi.mocked(hashRefreshToken)
+const hashRefreshTokenMock =  vi.mocked(hashRefreshToken)
 
 const activeUser = {
   id: '78bd6894-d3d7-405b-9443-17d376b50db1',
@@ -63,15 +63,13 @@ describe('AuthService.Login', () => {
     authRepoMock.updateLastLogin.mockResolvedValue(undefined)
     verifyPasswordMock.mockResolvedValue(true)
     generateRefreshTokenMock.mockReturnValue('raw-refresh-token')
-    hashRefreshTokenMock.mockReturnValue('hashed-refresh-token')
+    hashRefreshTokenMock.mockResolvedValue('hashed-refresh-token')
     generateAcessTokenMock.mockReturnValue('access-token')
   })
 
   it('stores only the hashed refresh token and returns the raw refresh token for the cookie', async () => {
     const result = await AuthService.Login(
-      { email: 'admin@example.com', password: 'correct-password' },
-      'vitest-agent',
-      '127.0.0.1',
+      { email: 'admin@example.com', password: 'correct-password', userAgent:  'vitest-agent', ipAddress: '127.0.0.1'},
     )
 
     expect(hashRefreshTokenMock).toHaveBeenCalledWith('raw-refresh-token')
@@ -102,9 +100,7 @@ describe('AuthService.Login', () => {
 
     await expect(
       AuthService.Login(
-        { email: 'missing@example.com', password: 'correct-password' },
-        null,
-        null,
+        { email: 'missing@example.com', password: 'correct-password', userAgent:"", ipAddress:""  },
       ),
     ).rejects.toMatchObject({
       statusCode: 401,
@@ -118,9 +114,7 @@ describe('AuthService.Login', () => {
 
     await expect(
       AuthService.Login(
-        { email: 'admin@example.com', password: 'wrong-password' },
-        null,
-        null,
+        { email: 'admin@example.com', password: 'wrong-password',  userAgent:"", ipAddress:"" },
       ),
     ).rejects.toMatchObject({
       statusCode: 401,
@@ -137,9 +131,7 @@ describe('AuthService.Login', () => {
 
     await expect(
       AuthService.Login(
-        { email: 'admin@example.com', password: 'correct-password' },
-        null,
-        null,
+        { email: 'admin@example.com', password: 'correct-password', userAgent:"", ipAddress:""  },
       ),
     ).rejects.toMatchObject({
       statusCode: 403,

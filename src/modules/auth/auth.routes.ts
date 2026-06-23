@@ -1,8 +1,10 @@
 import express, { type Router } from 'express'
-import { validate } from '../../middleware/validate'
+import { validate, validateRefreshToken } from '../../middleware/validate'
 import AuthController from './auth.controller'
-import { loginSchema } from './auth.schemas'
+import { loginSchema, refreshTokenSchema } from './auth.schemas'
+import { clientInfo } from '../../middleware/clientInfo'
 
 export const authRouter: Router = express.Router()
 
-authRouter.post('/login', validate(loginSchema), AuthController.Login)
+authRouter.post('/login', validate(loginSchema), clientInfo, AuthController.Login)
+authRouter.post('/refresh', validateRefreshToken(refreshTokenSchema), clientInfo, AuthController.Refresh)
