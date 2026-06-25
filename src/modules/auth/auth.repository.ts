@@ -62,13 +62,23 @@ class AuthRepo {
     })
   }
 
-  static async revokeAuthSessionFamily(tokenFamily: string) {
-    await prisma.auth_Sessions.updateMany({
+  static async revokeAuthSession(sessionId: string) {
+    await prisma.auth_Sessions.update({
       where: {
-        token_family: tokenFamily,
+          id: sessionId,
         revoked_at: null,
       },
       data: { revoked_at: new Date() },
+    })
+  }
+
+  static async revokeAuthSessionFamily(userId:string){
+    await prisma.auth_Sessions.updateMany({
+       where:{
+        user_id:userId,
+        revoked_at:null
+       },
+       data:{revoked_at: new Date()}
     })
   }
 }

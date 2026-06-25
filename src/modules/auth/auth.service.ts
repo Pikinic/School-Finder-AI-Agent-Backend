@@ -8,7 +8,7 @@ import {
 } from '../../common/security/token'
 import { hashRefreshToken } from '../../common/security/tokenHash'
 import AuthRepo from './auth.repository'
-import type { AuthSessionDbData, LoginT, RefreshT } from './auth.types'
+import type { AccesTokenT, AuthSessionDbData, LoginT, RefreshT } from './auth.types'
 
 class AuthService {
   static Login = async (requestBody: LoginT) => {
@@ -99,7 +99,7 @@ class AuthService {
 
     const authExpiryDate = new Date(authSession.expires_at)
     if (authExpiryDate <= new Date()) {
-      await AuthRepo.revokeAuthSessionFamily(authSession.token_family)
+      await AuthRepo.revokeAuthSession(authSession.id)
       throw createError(
         'Authentication session has expired, please log in again',
         401,
@@ -109,7 +109,6 @@ class AuthService {
     }
 
     if (authSession.revoked_at) {
-      await AuthRepo.revokeAuthSessionFamily(authSession.token_family)
       throw createError(
         'Authentication session revoked, please log in again',
         401,
@@ -132,7 +131,7 @@ class AuthService {
       authSession.ip_address !== data.ipAddress ||
       authSession.user_agent !== data.userAgent
     ) {
-      await AuthRepo.revokeAuthSessionFamily(authSession.token_family)
+      await AuthRepo.revokeAuthSession(authSession.id)
       throw createError(
         'Session device mismatch detected. Please log in again.',
         401,
@@ -158,6 +157,11 @@ class AuthService {
     )
 
     return { newRefreshToken, accessToken }
+  }
+
+  static Logout = async (data:AccesTokenT)=>{
+      const revokeAuthSession = await AuthRepo.revokeAuthSession(data.session_Id)
+
   }
 }
 

@@ -38,6 +38,14 @@ class AuthController {
       next(error)
     }
   }
+  static Logout = async (req:Request, res:Response, next:NextFunction)=>{
+   try {
+     const logoutCurrentSession = await AuthService.Logout(req.body)
+    res.status(200).send(successResponse(true, "Succesfully log out", { requestId: req.id }))
+    } catch (error) {
+      next(error)
+   }
+  }
 }
 
 export default AuthController

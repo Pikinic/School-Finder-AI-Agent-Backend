@@ -1,18 +1,18 @@
-interface ClientInfo {
+export interface ClientInfo {
   ipAddress: string | null
   userAgent: string | null
 }
 
-interface LoginT extends ClientInfo {
+export interface LoginT extends ClientInfo {
   email: string
   password: string
 }
 
-type RefreshT = ClientInfo & {
+export type RefreshT = ClientInfo & {
   refreshToken: string
 }
 
-type AuthSessionDbData = {
+export type AuthSessionDbData = {
   user_id: string
   refreshTokenHash: string
   tokenFamily: string
@@ -21,10 +21,17 @@ type AuthSessionDbData = {
   expiresAt: Date
 }
 
-type RotateRefreshTokenData = {
+export type RotateRefreshTokenData = {
   authSessionId: string
   lastUsedAt: Date
   hashedRefreshToken: string
 }
 
-export { LoginT, RefreshT, AuthSessionDbData, RotateRefreshTokenData }
+export type AccesTokenT = {
+  sub: string
+  session_Id: string
+  role: string
+  token_version: number
+}
+
+
