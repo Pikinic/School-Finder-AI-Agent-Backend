@@ -173,6 +173,22 @@ class AuthService {
       const revokeAuthSession = await AuthRepo.revokeAuthSession(findSession?.id as string)
 
   }
+  
+  static LogoutAll = async (data:AccesTokenT)=>{
+      const hashedRefreshToken = hashRefreshToken(data.refreshToken)
+    const findSession = await AuthRepo.findAuthSession(hashedRefreshToken)
+
+    if(findSession?.revoked_at){
+      throw createError(
+        'Authentication session revoked, please log in again',
+        401,
+        {},
+        AUTH_ERROR_CODES.AUTH_SESSION_REVOKED)
+    }
+    
+    const revokeAllAuthSession = await AuthRepo.revokeAuthSessionFamily(findSession?.user_id as string)
+    
+  }
 }
 
 export default AuthService

@@ -48,6 +48,17 @@ class AuthController {
       next(error)
    }
   }
+
+  static LogoutAll = async (req:Request, res:Response, next:NextFunction)=>{
+      try {
+        const logoutAllSessions = await AuthService.LogoutAll(req.body)
+        clearCookie(res)
+        res.status(200).send(successResponse(true, "All sessions logged out", {requestId:req.id}))
+      } catch (error) {
+        next(error)
+      }
+
+  }
 }
 
 export default AuthController
