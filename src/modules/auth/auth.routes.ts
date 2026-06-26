@@ -9,4 +9,4 @@ export const authRouter: Router = express.Router()
 
 authRouter.post('/login', validate(loginSchema), clientInfo, AuthController.Login)
 authRouter.post('/refresh', validateRefreshToken(refreshTokenSchema), clientInfo, AuthController.Refresh)
-authRouter.post("/logout", AuthenticateMiddleware, AuthController.Logout)
+authRouter.post("/logout", AuthenticateMiddleware, validateRefreshToken(refreshTokenSchema),  AuthController.Logout)

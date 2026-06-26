@@ -32,6 +32,7 @@ export type AccesTokenT = {
   session_Id: string
   role: string
   token_version: number
+  refreshToken:string
 }
 
 

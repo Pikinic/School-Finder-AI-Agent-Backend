@@ -9,3 +9,7 @@ export const setCookie = (res: Response, cookie: string) => {
     maxAge: 1000 * 60 * 60 * 24 * 30,
   })
 }
+
+export const clearCookie = (res:Response)=>{
+  res.clearCookie('refreshToken')
+}

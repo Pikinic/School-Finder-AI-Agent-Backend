@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from 'express'
 import { successResponse } from '../../http/response'
-import { setCookie } from '../../http/cookie'
+import { clearCookie, setCookie } from '../../http/cookie'
 import AuthService from './auth.service'
 import type { LoginT, RefreshT } from './auth.types'
 
@@ -40,8 +40,10 @@ class AuthController {
   }
   static Logout = async (req:Request, res:Response, next:NextFunction)=>{
    try {
+    
      const logoutCurrentSession = await AuthService.Logout(req.body)
-    res.status(200).send(successResponse(true, "Succesfully log out", { requestId: req.id }))
+     clearCookie(res)
+     res.status(200).send(successResponse(true, "Succesfully log out", { requestId: req.id }))
     } catch (error) {
       next(error)
    }
