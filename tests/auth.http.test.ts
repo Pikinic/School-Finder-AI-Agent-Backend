@@ -4,7 +4,15 @@ import request from 'supertest'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import app from '../src/app'
 import { generateAcessToken } from '../src/common/security/token'
+import AuthRepo from '../src/modules/auth/auth.repository'
 import AuthService from '../src/modules/auth/auth.service'
+
+vi.mock('../src/modules/auth/auth.repository', () => ({
+  default: {
+    findUser: vi.fn(),
+    findAuthSessionById: vi.fn(),
+  },
+}))
 
 vi.mock('../src/modules/auth/auth.service', () => ({
   default: {
@@ -13,8 +21,11 @@ vi.mock('../src/modules/auth/auth.service', () => ({
     Logout: vi.fn(),
     LogoutAll: vi.fn(),
     UserDetails: vi.fn(),
+    EditUserDetails: vi.fn(),
   },
 }))
+
+const authRepoMock = vi.mocked(AuthRepo)
 
 type LoginResponseBody = {
   success: boolean
@@ -65,6 +76,38 @@ type ErrorResponseBody = {
 }
 
 const accessToken = generateAcessToken('user-id', 'session-id', 'ADMIN', 0)
+const activeUser = {
+  id: 'user-id',
+  public_id: 'usr_123',
+  full_name: 'Admin User',
+  email: 'admin@example.com',
+  phone: null,
+  password_hash: 'argon-hash',
+  role: 'ADMIN',
+  status: 'ACTIVE',
+  last_login_at: null,
+  password_changed_at: null,
+  token_version: 0,
+  created_at: new Date('2026-06-01T00:00:00.000Z'),
+  updated_at: new Date('2026-06-01T00:00:00.000Z'),
+} as const
+const activeSession = {
+  id: 'session-id',
+  user_id: 'user-id',
+  refresh_token_hash: 'hashed-refresh-token',
+  token_family: 'token-family-id',
+  user_agent: 'vitest-agent',
+  ip_address: '127.0.0.1',
+  expires_at: new Date('2026-07-01T00:00:00.000Z'),
+  revoked_at: null,
+  last_used_at: null,
+  created_at: new Date('2026-06-01T00:00:00.000Z'),
+} as const
+
+const mockAuthenticatedRequest = () => {
+  authRepoMock.findUser.mockResolvedValue(activeUser)
+  authRepoMock.findAuthSessionById.mockResolvedValue(activeSession)
+}
 
 const getFirstSetCookie = (headers: unknown): string | undefined => {
   const headerRecord =
@@ -214,6 +257,7 @@ describe('POST /api/v1/auth/logout', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    mockAuthenticatedRequest()
     vi.mocked(AuthService.Logout).mockResolvedValue(undefined)
   })
 
@@ -267,6 +311,7 @@ describe('POST /api/v1/auth/logout-all', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    mockAuthenticatedRequest()
     vi.mocked(AuthService.LogoutAll).mockResolvedValue(undefined)
   })
 
@@ -301,6 +346,7 @@ describe('GET /api/v1/auth/me', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    mockAuthenticatedRequest()
     vi.mocked(AuthService.UserDetails).mockResolvedValue({
       public_id: 'usr_123',
       full_name: 'Admin User',
@@ -340,5 +386,97 @@ describe('GET /api/v1/auth/me', () => {
       iat: expect.any(Number) as number,
       exp: expect.any(Number) as number,
     })
+  })
+})
+
+describe('PATCH /api/v1/auth/me', () => {
+  const testApp: Express = app
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockAuthenticatedRequest()
+    vi.mocked(AuthService.EditUserDetails).mockResolvedValue({
+      public_id: 'usr_123',
+      full_name: 'Updated Admin',
+      email: 'admin@example.com',
+      phone: '+2348012345678',
+      role: 'ADMIN',
+      status: 'ACTIVE',
+      last_login_at: null,
+      created_at: new Date('2026-06-01T00:00:00.000Z'),
+      updated_at: new Date('2026-06-20T00:00:00.000Z'),
+    })
+  })
+
+  it('updates the authenticated user profile fields', async () => {
+    const response = await request(testApp)
+      .patch('/api/v1/auth/me')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ fullName: 'Updated Admin', phone: '+2348012345678' })
+      .expect(200)
+
+    const responseBody = response.body as unknown as UserDetailsResponseBody
+
+    expect(responseBody).toMatchObject({
+      success: true,
+      message: 'User details updated successfully',
+      data: {
+        public_id: 'usr_123',
+        email: 'admin@example.com',
+        role: 'ADMIN',
+      },
+    })
+    expect(typeof responseBody.meta.requestId).toBe('string')
+    expect(AuthService.EditUserDetails).toHaveBeenCalledWith(
+      {
+        sub: 'user-id',
+        session_Id: 'session-id',
+        role: 'ADMIN',
+        token_version: 0,
+        iat: expect.any(Number) as number,
+        exp: expect.any(Number) as number,
+      },
+      {
+        fullName: 'Updated Admin',
+        phone: '+2348012345678',
+      },
+    )
+  })
+
+  it('rejects empty profile updates', async () => {
+    const response = await request(testApp)
+      .patch('/api/v1/auth/me')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({})
+      .expect(400)
+
+    const responseBody = response.body as unknown as ErrorResponseBody
+
+    expect(responseBody.error).toMatchObject({
+      message: 'Validation failed',
+      code: 'VALIDATION_ERROR',
+    })
+    expect(AuthService.EditUserDetails).not.toHaveBeenCalled()
+  })
+
+  it('rejects revoked access-token sessions before updating', async () => {
+    authRepoMock.findAuthSessionById.mockResolvedValue({
+      ...activeSession,
+      revoked_at: new Date('2026-06-20T00:00:00.000Z'),
+    })
+
+    const response = await request(testApp)
+      .patch('/api/v1/auth/me')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ fullName: 'Updated Admin' })
+      .expect(401)
+
+    const responseBody = response.body as unknown as ErrorResponseBody
+
+    expect(responseBody.error).toMatchObject({
+      message: 'Authentication session revoked, please log in again',
+      code: 'AUTH_SESSION_REVOKED',
+    })
+    expect(AuthService.EditUserDetails).not.toHaveBeenCalled()
   })
 })

@@ -2,7 +2,7 @@ import type { NextFunction, Request, Response } from 'express'
 import { successResponse } from '../../http/response'
 import { clearCookie, setCookie } from '../../http/cookie'
 import AuthService from './auth.service'
-import type { LoginT, RefreshT } from './auth.types'
+import type { EditUserDetailsT, LoginT, RefreshT } from './auth.types'
 
 const getRefreshTokenFromRequest = (req: Request): string => {
   return (req.body as { refreshToken: string }).refreshToken
@@ -106,6 +106,35 @@ class AuthController {
             true,
             'User details retrieved successfully',
             getUserDetails,
+            { requestId: req.id },
+          ),
+        )
+    } catch (error) {
+      next(error)
+    }
+  }
+
+  static EditUserDetails = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    try {
+      if (!req.auth) {
+        throw new Error('Authenticated request missing auth claims')
+      }
+
+      const updatedUserDetails = await AuthService.EditUserDetails(
+        req.auth,
+        req.body as EditUserDetailsT,
+      )
+      res
+        .status(200)
+        .send(
+          successResponse(
+            true,
+            'User details updated successfully',
+            updatedUserDetails,
             { requestId: req.id },
           ),
         )

@@ -12,6 +12,11 @@ export type RefreshT = ClientInfo & {
   refreshToken: string
 }
 
+export type EditUserDetailsT = {
+  fullName?: string
+  phone?: string | null
+}
+
 export type AuthSessionDbData = {
   user_id: string
   refreshTokenHash: string

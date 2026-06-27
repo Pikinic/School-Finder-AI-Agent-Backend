@@ -3,7 +3,10 @@ import {
   OpenApiGeneratorV31,
 } from '@asteasolutions/zod-to-openapi'
 import { z } from 'zod'
-import { loginSchema } from '../modules/auth/auth.schemas'
+import {
+  editUserDetailsSchema,
+  loginSchema,
+} from '../modules/auth/auth.schemas'
 
 const registry = new OpenAPIRegistry()
 
@@ -95,6 +98,10 @@ const userDetailsResponseSchema = registry.register(
 )
 
 const registeredLoginSchema = registry.register('LoginRequest', loginSchema)
+const registeredEditUserDetailsSchema = registry.register(
+  'EditUserDetailsRequest',
+  editUserDetailsSchema,
+)
 const refreshCookieParameter = z.object({
   refreshToken: z
     .string()
@@ -333,6 +340,61 @@ registry.registerPath({
     401: {
       description:
         'Bearer token is missing or invalid, or the user was not found.',
+      content: {
+        'application/json': {
+          schema: errorResponseSchema,
+        },
+      },
+    },
+  },
+})
+
+registry.registerPath({
+  method: 'patch',
+  path: '/api/v1/auth/me',
+  tags: ['Auth'],
+  security: [{ bearerAuth: [] }],
+  summary: 'Update the authenticated staff user',
+  description:
+    'Requires a bearer access token. Allows the authenticated staff user to update their own fullName and phone only. Role, status, email, password, and token metadata are not editable from this endpoint.',
+  request: {
+    body: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: registeredEditUserDetailsSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: 'Authenticated user details updated.',
+      content: {
+        'application/json': {
+          schema: userDetailsResponseSchema,
+        },
+      },
+    },
+    400: {
+      description: 'Request validation failed.',
+      content: {
+        'application/json': {
+          schema: errorResponseSchema,
+        },
+      },
+    },
+    401: {
+      description:
+        'Bearer token is missing or invalid, the session was revoked or expired, or the user was not found.',
+      content: {
+        'application/json': {
+          schema: errorResponseSchema,
+        },
+      },
+    },
+    403: {
+      description: 'Account is not active.',
       content: {
         'application/json': {
           schema: errorResponseSchema,

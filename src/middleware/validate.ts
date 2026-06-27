@@ -4,8 +4,7 @@ import { createError } from '../common/errors/AppError'
 import { AUTH_ERROR_CODES } from '../common/errors/errorCodes'
 
 export const validate =
-  (schema: z.ZodObject) =>
-  (req: Request, _res: Response, next: NextFunction) => {
+  (schema: z.ZodType) => (req: Request, _res: Response, next: NextFunction) => {
     const requestEnvironment = schema.safeParse(req.body)
 
     if (!requestEnvironment.success) {

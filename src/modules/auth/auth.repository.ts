@@ -1,6 +1,10 @@
 import { createError } from '../../common/errors/AppError'
 import prisma from '../../database/prisma'
-import type { AuthSessionDbData, RotateRefreshTokenData } from './auth.types'
+import type {
+  AuthSessionDbData,
+  EditUserDetailsT,
+  RotateRefreshTokenData,
+} from './auth.types'
 
 class AuthRepo {
   static async findUser(where: { email?: string; id?: string }) {
@@ -52,6 +56,12 @@ class AuthRepo {
     return authSession
   }
 
+  static async findAuthSessionById(sessionId: string) {
+    return prisma.auth_Sessions.findUnique({
+      where: { id: sessionId },
+    })
+  }
+
   static async rotateRefreshToken(data: RotateRefreshTokenData) {
     return prisma.auth_Sessions.update({
       where: { id: data.authSessionId },
@@ -65,20 +75,30 @@ class AuthRepo {
   static async revokeAuthSession(sessionId: string) {
     await prisma.auth_Sessions.update({
       where: {
-          id: sessionId,
+        id: sessionId,
         revoked_at: null,
       },
       data: { revoked_at: new Date() },
     })
   }
 
-  static async revokeAuthSessionFamily(userId:string){
+  static async revokeAuthSessionFamily(userId: string) {
     await prisma.auth_Sessions.updateMany({
-       where:{
-        user_id:userId,
-        revoked_at:null
-       },
-       data:{revoked_at: new Date()}
+      where: {
+        user_id: userId,
+        revoked_at: null,
+      },
+      data: { revoked_at: new Date() },
+    })
+  }
+
+  static async updateUserDetails(userId: string, data: EditUserDetailsT) {
+    return prisma.users.update({
+      where: { id: userId },
+      data: {
+        ...(data.fullName !== undefined && { full_name: data.fullName }),
+        ...(data.phone !== undefined && { phone: data.phone }),
+      },
     })
   }
 }

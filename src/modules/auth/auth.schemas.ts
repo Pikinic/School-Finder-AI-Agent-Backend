@@ -13,7 +13,21 @@ const forgetPasswordSchema = z.object({
 })
 
 const refreshTokenSchema = z.object({
-  refreshToken:z.string().trim().length(128)
+  refreshToken: z.string().trim().length(128),
 })
 
-export { loginSchema, forgetPasswordSchema, refreshTokenSchema }
+const editUserDetailsSchema = z
+  .object({
+    fullName: z.string().trim().min(2).max(160).optional(),
+    phone: z.string().trim().min(3).max(40).nullable().optional(),
+  })
+  .refine((data) => data.fullName !== undefined || data.phone !== undefined, {
+    message: 'At least one profile field is required',
+  })
+
+export {
+  loginSchema,
+  forgetPasswordSchema,
+  refreshTokenSchema,
+  editUserDetailsSchema,
+}

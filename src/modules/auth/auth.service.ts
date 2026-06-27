@@ -12,9 +12,34 @@ import type {
   AccessTokenClaims,
   AuthenticatedRefreshT,
   AuthSessionDbData,
+  EditUserDetailsT,
   LoginT,
   RefreshT,
 } from './auth.types'
+
+const toSafeUser = (user: {
+  public_id: string
+  full_name: string
+  email: string
+  phone: string | null
+  role: string
+  status: string
+  last_login_at: Date | null
+  created_at: Date
+  updated_at: Date
+}) => {
+  return {
+    public_id: user.public_id,
+    full_name: user.full_name,
+    email: user.email,
+    phone: user.phone,
+    role: user.role,
+    status: user.status,
+    last_login_at: user.last_login_at,
+    created_at: user.created_at,
+    updated_at: user.updated_at,
+  }
+}
 
 class AuthService {
   static Login = async (requestBody: LoginT) => {
@@ -247,20 +272,26 @@ class AuthService {
       )
     }
 
-    return {
-      public_id: findUser.public_id,
-      full_name: findUser.full_name,
-      email: findUser.email,
-      phone: findUser.phone,
-      role: findUser.role,
-      status: findUser.status,
-      last_login_at: findUser.last_login_at,
-      created_at: findUser.created_at,
-      updated_at: findUser.updated_at,
-    }
+    return toSafeUser(findUser)
   }
 
-  static EditUserDetails = async () => {}
+  static EditUserDetails = async (
+    auth: AccessTokenClaims,
+    data: EditUserDetailsT,
+  ) => {
+    const findUser = await AuthRepo.findUser({ id: auth.sub })
+    if (!findUser) {
+      throw createError(
+        'Unable to get user',
+        401,
+        {},
+        AUTH_ERROR_CODES.INVALID_CREDENTIALS,
+      )
+    }
+
+    const updatedUser = await AuthRepo.updateUserDetails(auth.sub, data)
+    return toSafeUser(updatedUser)
+  }
 }
 
 export default AuthService

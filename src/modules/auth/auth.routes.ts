@@ -1,7 +1,11 @@
 import express, { type Router } from 'express'
 import { validate, validateRefreshToken } from '../../middleware/validate'
 import AuthController from './auth.controller'
-import { loginSchema, refreshTokenSchema } from './auth.schemas'
+import {
+  editUserDetailsSchema,
+  loginSchema,
+  refreshTokenSchema,
+} from './auth.schemas'
 import { clientInfo } from '../../middleware/clientInfo'
 import { AuthenticateMiddleware } from '../../middleware/authenticate'
 
@@ -32,3 +36,9 @@ authRouter.post(
   AuthController.LogoutAll,
 )
 authRouter.get('/me', AuthenticateMiddleware, AuthController.UserDetails)
+authRouter.patch(
+  '/me',
+  validate(editUserDetailsSchema),
+  AuthenticateMiddleware,
+  AuthController.EditUserDetails,
+)

@@ -18,6 +18,8 @@ vi.mock('../src/modules/auth/auth.repository', () => ({
     rotateRefreshToken: vi.fn(),
     revokeAuthSession: vi.fn(),
     revokeAuthSessionFamily: vi.fn(),
+    findAuthSessionById: vi.fn(),
+    updateUserDetails: vi.fn(),
   },
 }))
 
@@ -451,5 +453,72 @@ describe('AuthService.UserDetails', () => {
     })
     expect(result).not.toHaveProperty('password_hash')
     expect(result).not.toHaveProperty('token_version')
+  })
+})
+
+describe('AuthService.EditUserDetails', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    authRepoMock.findUser.mockResolvedValue(activeUser)
+    authRepoMock.updateUserDetails.mockResolvedValue({
+      ...activeUser,
+      full_name: 'Updated Admin',
+      phone: '+2348012345678',
+      updated_at: new Date('2026-06-20T00:00:00.000Z'),
+    })
+  })
+
+  it('updates editable profile fields and returns the safe user shape', async () => {
+    const result = await AuthService.EditUserDetails(
+      {
+        sub: activeUser.id,
+        session_Id: activeSession.id,
+        role: activeUser.role,
+        token_version: activeUser.token_version,
+      },
+      {
+        fullName: 'Updated Admin',
+        phone: '+2348012345678',
+      },
+    )
+
+    expect(authRepoMock.findUser).toHaveBeenCalledWith({ id: activeUser.id })
+    expect(authRepoMock.updateUserDetails).toHaveBeenCalledWith(activeUser.id, {
+      fullName: 'Updated Admin',
+      phone: '+2348012345678',
+    })
+    expect(result).toEqual({
+      public_id: activeUser.public_id,
+      full_name: 'Updated Admin',
+      email: activeUser.email,
+      phone: '+2348012345678',
+      role: activeUser.role,
+      status: activeUser.status,
+      last_login_at: activeUser.last_login_at,
+      created_at: activeUser.created_at,
+      updated_at: new Date('2026-06-20T00:00:00.000Z'),
+    })
+    expect(result).not.toHaveProperty('password_hash')
+    expect(result).not.toHaveProperty('token_version')
+  })
+
+  it('rejects missing users', async () => {
+    authRepoMock.findUser.mockResolvedValue(null)
+
+    await expect(
+      AuthService.EditUserDetails(
+        {
+          sub: activeUser.id,
+          session_Id: activeSession.id,
+          role: activeUser.role,
+          token_version: activeUser.token_version,
+        },
+        { fullName: 'Updated Admin' },
+      ),
+    ).rejects.toMatchObject({
+      statusCode: 401,
+      code: AUTH_ERROR_CODES.INVALID_CREDENTIALS,
+    })
+    expect(authRepoMock.updateUserDetails).not.toHaveBeenCalled()
   })
 })
