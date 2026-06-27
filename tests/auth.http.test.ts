@@ -3,12 +3,16 @@ import type { Express } from 'express'
 import request from 'supertest'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import app from '../src/app'
+import { generateAcessToken } from '../src/common/security/token'
 import AuthService from '../src/modules/auth/auth.service'
 
 vi.mock('../src/modules/auth/auth.service', () => ({
   default: {
     Login: vi.fn(),
     Refresh: vi.fn(),
+    Logout: vi.fn(),
+    LogoutAll: vi.fn(),
+    UserDetails: vi.fn(),
   },
 }))
 
@@ -38,6 +42,19 @@ type RefreshResponseBody = {
   }
 }
 
+type UserDetailsResponseBody = {
+  success: boolean
+  message: string
+  data: {
+    public_id: string
+    email: string
+    role: string
+  }
+  meta: {
+    requestId: unknown
+  }
+}
+
 type ErrorResponseBody = {
   success: false
   error: {
@@ -46,6 +63,8 @@ type ErrorResponseBody = {
     requestId: unknown
   }
 }
+
+const accessToken = generateAcessToken('user-id', 'session-id', 'ADMIN', 0)
 
 const getFirstSetCookie = (headers: unknown): string | undefined => {
   const headerRecord =
@@ -187,5 +206,139 @@ describe('POST /api/v1/auth/refresh', () => {
       code: 'UNAUTHORIZED',
     })
     expect(AuthService.Refresh).not.toHaveBeenCalled()
+  })
+})
+
+describe('POST /api/v1/auth/logout', () => {
+  const testApp: Express = app
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(AuthService.Logout).mockResolvedValue(undefined)
+  })
+
+  it('passes bearer claims and the refresh cookie to the service, then clears the cookie', async () => {
+    const response = await request(testApp)
+      .post('/api/v1/auth/logout')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .set('Cookie', 'refreshToken=' + 'a'.repeat(128))
+      .expect(200)
+
+    const setCookie = getFirstSetCookie(response.headers)
+
+    expect(response.body).toMatchObject({
+      success: true,
+      message: 'Successfully logged out',
+      meta: {
+        requestId: expect.any(String) as string,
+      },
+    })
+    expect(setCookie).toContain('refreshToken=')
+    expect(setCookie).toContain('Expires=Thu, 01 Jan 1970')
+    expect(AuthService.Logout).toHaveBeenCalledWith({
+      sub: 'user-id',
+      session_Id: 'session-id',
+      role: 'ADMIN',
+      token_version: 0,
+      iat: expect.any(Number) as number,
+      exp: expect.any(Number) as number,
+      refreshToken: 'a'.repeat(128),
+    })
+  })
+
+  it('rejects requests without a bearer token', async () => {
+    const response = await request(testApp)
+      .post('/api/v1/auth/logout')
+      .set('Cookie', 'refreshToken=' + 'a'.repeat(128))
+      .expect(401)
+
+    const responseBody = response.body as unknown as ErrorResponseBody
+
+    expect(responseBody.error).toMatchObject({
+      message: 'Not authorized',
+      code: 'TOKEN_MISSING',
+    })
+    expect(AuthService.Logout).not.toHaveBeenCalled()
+  })
+})
+
+describe('POST /api/v1/auth/logout-all', () => {
+  const testApp: Express = app
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(AuthService.LogoutAll).mockResolvedValue(undefined)
+  })
+
+  it('passes bearer claims and revokes all sessions for that user', async () => {
+    const response = await request(testApp)
+      .post('/api/v1/auth/logout-all')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .set('Cookie', 'refreshToken=' + 'a'.repeat(128))
+      .expect(200)
+
+    expect(response.body).toMatchObject({
+      success: true,
+      message: 'All sessions logged out',
+      meta: {
+        requestId: expect.any(String) as string,
+      },
+    })
+    expect(AuthService.LogoutAll).toHaveBeenCalledWith({
+      sub: 'user-id',
+      session_Id: 'session-id',
+      role: 'ADMIN',
+      token_version: 0,
+      iat: expect.any(Number) as number,
+      exp: expect.any(Number) as number,
+      refreshToken: 'a'.repeat(128),
+    })
+  })
+})
+
+describe('GET /api/v1/auth/me', () => {
+  const testApp: Express = app
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(AuthService.UserDetails).mockResolvedValue({
+      public_id: 'usr_123',
+      full_name: 'Admin User',
+      email: 'admin@example.com',
+      phone: null,
+      role: 'ADMIN',
+      status: 'ACTIVE',
+      last_login_at: null,
+      created_at: new Date('2026-06-01T00:00:00.000Z'),
+      updated_at: new Date('2026-06-01T00:00:00.000Z'),
+    })
+  })
+
+  it('returns the authenticated user from bearer-token claims', async () => {
+    const response = await request(testApp)
+      .get('/api/v1/auth/me')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200)
+
+    const responseBody = response.body as unknown as UserDetailsResponseBody
+
+    expect(responseBody).toMatchObject({
+      success: true,
+      message: 'User details retrieved successfully',
+      data: {
+        public_id: 'usr_123',
+        email: 'admin@example.com',
+        role: 'ADMIN',
+      },
+    })
+    expect(typeof responseBody.meta.requestId).toBe('string')
+    expect(AuthService.UserDetails).toHaveBeenCalledWith({
+      sub: 'user-id',
+      session_Id: 'session-id',
+      role: 'ADMIN',
+      token_version: 0,
+      iat: expect.any(Number) as number,
+      exp: expect.any(Number) as number,
+    })
   })
 })

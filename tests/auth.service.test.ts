@@ -16,6 +16,7 @@ vi.mock('../src/modules/auth/auth.repository', () => ({
     updateLastLogin: vi.fn(),
     findAuthSession: vi.fn(),
     rotateRefreshToken: vi.fn(),
+    revokeAuthSession: vi.fn(),
     revokeAuthSessionFamily: vi.fn(),
   },
 }))
@@ -83,6 +84,7 @@ describe('AuthService.Login', () => {
       refresh_token_hash: 'new-hashed-refresh-token',
       last_used_at: new Date('2026-06-15T00:00:00.000Z'),
     })
+    authRepoMock.revokeAuthSession.mockResolvedValue(undefined)
     authRepoMock.revokeAuthSessionFamily.mockResolvedValue(undefined)
     verifyPasswordMock.mockResolvedValue(true)
     generateRefreshTokenMock.mockReturnValue('raw-refresh-token')
@@ -188,6 +190,7 @@ describe('AuthService.Refresh', () => {
       refresh_token_hash: 'new-hashed-refresh-token',
       last_used_at: new Date('2026-06-15T00:00:00.000Z'),
     })
+    authRepoMock.revokeAuthSession.mockResolvedValue(undefined)
     authRepoMock.revokeAuthSessionFamily.mockResolvedValue(undefined)
     hashRefreshTokenMock
       .mockReturnValueOnce('hashed-refresh-token')
@@ -260,8 +263,8 @@ describe('AuthService.Refresh', () => {
       statusCode: 401,
       code: AUTH_ERROR_CODES.AUTH_SESSION_EXPIRED,
     })
-    expect(authRepoMock.revokeAuthSessionFamily).toHaveBeenCalledWith(
-      activeSession.token_family,
+    expect(authRepoMock.revokeAuthSession).toHaveBeenCalledWith(
+      activeSession.id,
     )
   })
 
@@ -281,9 +284,7 @@ describe('AuthService.Refresh', () => {
       statusCode: 401,
       code: AUTH_ERROR_CODES.AUTH_SESSION_REVOKED,
     })
-    expect(authRepoMock.revokeAuthSessionFamily).toHaveBeenCalledWith(
-      activeSession.token_family,
-    )
+    expect(authRepoMock.revokeAuthSessionFamily).not.toHaveBeenCalled()
   })
 
   it('rejects inactive users', async () => {
@@ -315,8 +316,140 @@ describe('AuthService.Refresh', () => {
       statusCode: 401,
       code: AUTH_ERROR_CODES.AUTH_SESSION_DEVICE_MISMATCH,
     })
-    expect(authRepoMock.revokeAuthSessionFamily).toHaveBeenCalledWith(
-      activeSession.token_family,
+    expect(authRepoMock.revokeAuthSession).toHaveBeenCalledWith(
+      activeSession.id,
     )
+  })
+})
+
+describe('AuthService.Logout', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    hashRefreshTokenMock.mockReset()
+    authRepoMock.findAuthSession.mockResolvedValue(activeSession)
+    authRepoMock.revokeAuthSession.mockResolvedValue(undefined)
+    hashRefreshTokenMock.mockReturnValue('hashed-refresh-token')
+  })
+
+  it('revokes the current refresh-token session', async () => {
+    await AuthService.Logout({
+      sub: activeUser.id,
+      session_Id: activeSession.id,
+      role: activeUser.role,
+      token_version: activeUser.token_version,
+      refreshToken: 'raw-refresh-token',
+    })
+
+    expect(hashRefreshTokenMock).toHaveBeenCalledWith('raw-refresh-token')
+    expect(authRepoMock.findAuthSession).toHaveBeenCalledWith(
+      'hashed-refresh-token',
+    )
+    expect(authRepoMock.revokeAuthSession).toHaveBeenCalledWith(
+      activeSession.id,
+    )
+  })
+
+  it('rejects missing refresh-token sessions', async () => {
+    authRepoMock.findAuthSession.mockResolvedValue(null)
+
+    await expect(
+      AuthService.Logout({
+        sub: activeUser.id,
+        session_Id: activeSession.id,
+        role: activeUser.role,
+        token_version: activeUser.token_version,
+        refreshToken: 'raw-refresh-token',
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 401,
+      code: AUTH_ERROR_CODES.AUTH_SESSION_NOT_FOUND,
+    })
+    expect(authRepoMock.revokeAuthSession).not.toHaveBeenCalled()
+  })
+
+  it('rejects refresh sessions that do not match the access token', async () => {
+    await expect(
+      AuthService.Logout({
+        sub: activeUser.id,
+        session_Id: 'different-session-id',
+        role: activeUser.role,
+        token_version: activeUser.token_version,
+        refreshToken: 'raw-refresh-token',
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 401,
+      code: AUTH_ERROR_CODES.AUTH_SESSION_DEVICE_MISMATCH,
+    })
+    expect(authRepoMock.revokeAuthSession).not.toHaveBeenCalled()
+  })
+})
+
+describe('AuthService.LogoutAll', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    hashRefreshTokenMock.mockReset()
+    authRepoMock.findAuthSession.mockResolvedValue(activeSession)
+    authRepoMock.revokeAuthSessionFamily.mockResolvedValue(undefined)
+    hashRefreshTokenMock.mockReturnValue('hashed-refresh-token')
+  })
+
+  it('revokes all active sessions for the authenticated user', async () => {
+    await AuthService.LogoutAll({
+      sub: activeUser.id,
+      session_Id: activeSession.id,
+      role: activeUser.role,
+      token_version: activeUser.token_version,
+      refreshToken: 'raw-refresh-token',
+    })
+
+    expect(authRepoMock.revokeAuthSessionFamily).toHaveBeenCalledWith(
+      activeUser.id,
+    )
+  })
+
+  it('rejects refresh sessions owned by another user', async () => {
+    await expect(
+      AuthService.LogoutAll({
+        sub: 'different-user-id',
+        session_Id: activeSession.id,
+        role: activeUser.role,
+        token_version: activeUser.token_version,
+        refreshToken: 'raw-refresh-token',
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 401,
+      code: AUTH_ERROR_CODES.AUTH_SESSION_DEVICE_MISMATCH,
+    })
+    expect(authRepoMock.revokeAuthSessionFamily).not.toHaveBeenCalled()
+  })
+})
+
+describe('AuthService.UserDetails', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    authRepoMock.findUser.mockResolvedValue(activeUser)
+  })
+
+  it('returns the safe authenticated user shape', async () => {
+    const result = await AuthService.UserDetails({
+      sub: activeUser.id,
+      session_Id: activeSession.id,
+      role: activeUser.role,
+      token_version: activeUser.token_version,
+    })
+
+    expect(result).toEqual({
+      public_id: activeUser.public_id,
+      full_name: activeUser.full_name,
+      email: activeUser.email,
+      phone: activeUser.phone,
+      role: activeUser.role,
+      status: activeUser.status,
+      last_login_at: activeUser.last_login_at,
+      created_at: activeUser.created_at,
+      updated_at: activeUser.updated_at,
+    })
+    expect(result).not.toHaveProperty('password_hash')
+    expect(result).not.toHaveProperty('token_version')
   })
 })

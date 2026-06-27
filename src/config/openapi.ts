@@ -61,6 +61,39 @@ const refreshResponseSchema = registry.register(
   }),
 )
 
+const emptySuccessResponseSchema = registry.register(
+  'EmptySuccessResponse',
+  z.object({
+    success: z.literal(true),
+    message: z.string(),
+    meta: z.object({
+      requestId: z.string(),
+    }),
+  }),
+)
+
+const userDetailsResponseSchema = registry.register(
+  'UserDetailsResponse',
+  z.object({
+    success: z.literal(true),
+    message: z.string(),
+    data: z.object({
+      public_id: z.string(),
+      full_name: z.string(),
+      email: z.string().email(),
+      phone: z.string().nullable(),
+      role: z.enum(['ADMIN', 'ADVISOR', 'OPERATIONS']),
+      status: z.enum(['INVITED', 'ACTIVE', 'DISABLED']),
+      last_login_at: z.date().nullable(),
+      created_at: z.date(),
+      updated_at: z.date(),
+    }),
+    meta: z.object({
+      requestId: z.string(),
+    }),
+  }),
+)
+
 const registeredLoginSchema = registry.register('LoginRequest', loginSchema)
 const refreshCookieParameter = z.object({
   refreshToken: z
@@ -140,7 +173,7 @@ registry.registerPath({
   tags: ['Auth'],
   summary: 'Refresh a staff access token',
   description:
-    'Reads the opaque refresh token from the HttpOnly refreshToken cookie, validates the stored session, rotates the refresh-token hash on the same session row, sets a new refreshToken cookie, and returns a new short-lived access token.',
+    'Reads the opaque refresh token from the HttpOnly refreshToken cookie, validates the stored auth session and client fingerprint, rotates the refresh-token hash in place, sets a new refreshToken cookie, and returns a new short-lived access token.',
   request: {
     cookies: refreshCookieParameter,
   },
@@ -180,6 +213,126 @@ registry.registerPath({
     },
     403: {
       description: 'Account is not active.',
+      content: {
+        'application/json': {
+          schema: errorResponseSchema,
+        },
+      },
+    },
+  },
+})
+registry.registerPath({
+  method: 'post',
+  path: '/api/v1/auth/logout',
+  tags: ['Auth'],
+  security: [{ bearerAuth: [] }],
+  summary: 'Log out the current staff session',
+  description:
+    'Requires a bearer access token and the refreshToken cookie. The refresh token is hashed, matched to the authenticated user and current access-token session, revoked, and then cleared from the browser.',
+  request: {
+    cookies: refreshCookieParameter,
+  },
+  responses: {
+    200: {
+      description: 'Current session revoked and refreshToken cookie cleared.',
+      headers: {
+        'Set-Cookie': {
+          schema: { type: 'string' },
+          description: 'Clears the refreshToken cookie.',
+        },
+      },
+      content: {
+        'application/json': {
+          schema: emptySuccessResponseSchema,
+        },
+      },
+    },
+    400: {
+      description: 'Refresh cookie is missing or malformed.',
+      content: {
+        'application/json': {
+          schema: errorResponseSchema,
+        },
+      },
+    },
+    401: {
+      description:
+        'Bearer token is missing or invalid, or the refresh session was not found, revoked, or did not match the access token.',
+      content: {
+        'application/json': {
+          schema: errorResponseSchema,
+        },
+      },
+    },
+  },
+})
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/v1/auth/logout-all',
+  tags: ['Auth'],
+  security: [{ bearerAuth: [] }],
+  summary: 'Log out all staff sessions',
+  description:
+    'Requires a bearer access token and the refreshToken cookie. After validating the cookie session belongs to the authenticated user, all active auth sessions for that user are revoked by user_id and the refreshToken cookie is cleared.',
+  request: {
+    cookies: refreshCookieParameter,
+  },
+  responses: {
+    200: {
+      description: 'All active sessions for the authenticated user revoked.',
+      headers: {
+        'Set-Cookie': {
+          schema: { type: 'string' },
+          description: 'Clears the refreshToken cookie.',
+        },
+      },
+      content: {
+        'application/json': {
+          schema: emptySuccessResponseSchema,
+        },
+      },
+    },
+    400: {
+      description: 'Refresh cookie is missing or malformed.',
+      content: {
+        'application/json': {
+          schema: errorResponseSchema,
+        },
+      },
+    },
+    401: {
+      description:
+        'Bearer token is missing or invalid, or the refresh session was not found, revoked, or did not belong to the authenticated user.',
+      content: {
+        'application/json': {
+          schema: errorResponseSchema,
+        },
+      },
+    },
+  },
+})
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/v1/auth/me',
+  tags: ['Auth'],
+  security: [{ bearerAuth: [] }],
+  summary: 'Get the authenticated staff user',
+  description:
+    'Requires a bearer access token and returns the safe staff user fields for the authenticated subject.',
+  responses: {
+    200: {
+      description: 'Authenticated user details returned.',
+      content: {
+        'application/json': {
+          schema: userDetailsResponseSchema,
+        },
+      },
+    },
+    401: {
+      description:
+        'Bearer token is missing or invalid, or the user was not found.',
       content: {
         'application/json': {
           schema: errorResponseSchema,

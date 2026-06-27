@@ -8,7 +8,13 @@ import {
 } from '../../common/security/token'
 import { hashRefreshToken } from '../../common/security/tokenHash'
 import AuthRepo from './auth.repository'
-import type { AccesTokenT, AuthSessionDbData, LoginT, RefreshT } from './auth.types'
+import type {
+  AccessTokenClaims,
+  AuthenticatedRefreshT,
+  AuthSessionDbData,
+  LoginT,
+  RefreshT,
+} from './auth.types'
 
 class AuthService {
   static Login = async (requestBody: LoginT) => {
@@ -159,36 +165,102 @@ class AuthService {
     return { newRefreshToken, accessToken }
   }
 
-  static Logout = async (data:AccesTokenT)=>{
-     const hashedRefreshToken = hashRefreshToken(data.refreshToken)
+  static Logout = async (data: AuthenticatedRefreshT) => {
+    const hashedRefreshToken = hashRefreshToken(data.refreshToken)
     const findSession = await AuthRepo.findAuthSession(hashedRefreshToken)
 
-    if(findSession?.revoked_at){
+    if (!findSession) {
+      throw createError(
+        'Authentication session not found or has expired',
+        401,
+        {},
+        AUTH_ERROR_CODES.AUTH_SESSION_NOT_FOUND,
+      )
+    }
+
+    if (
+      findSession.user_id !== data.sub ||
+      findSession.id !== data.session_Id
+    ) {
+      throw createError(
+        'Authentication session does not match the access token',
+        401,
+        {},
+        AUTH_ERROR_CODES.AUTH_SESSION_DEVICE_MISMATCH,
+      )
+    }
+
+    if (findSession.revoked_at) {
       throw createError(
         'Authentication session revoked, please log in again',
         401,
         {},
-        AUTH_ERROR_CODES.AUTH_SESSION_REVOKED)
+        AUTH_ERROR_CODES.AUTH_SESSION_REVOKED,
+      )
     }
-      const revokeAuthSession = await AuthRepo.revokeAuthSession(findSession?.id as string)
 
+    await AuthRepo.revokeAuthSession(findSession.id)
   }
-  
-  static LogoutAll = async (data:AccesTokenT)=>{
-      const hashedRefreshToken = hashRefreshToken(data.refreshToken)
+
+  static LogoutAll = async (data: AuthenticatedRefreshT) => {
+    const hashedRefreshToken = hashRefreshToken(data.refreshToken)
     const findSession = await AuthRepo.findAuthSession(hashedRefreshToken)
 
-    if(findSession?.revoked_at){
+    if (!findSession) {
+      throw createError(
+        'Authentication session not found or has expired',
+        401,
+        {},
+        AUTH_ERROR_CODES.AUTH_SESSION_NOT_FOUND,
+      )
+    }
+
+    if (findSession.user_id !== data.sub) {
+      throw createError(
+        'Authentication session does not match the access token',
+        401,
+        {},
+        AUTH_ERROR_CODES.AUTH_SESSION_DEVICE_MISMATCH,
+      )
+    }
+
+    if (findSession.revoked_at) {
       throw createError(
         'Authentication session revoked, please log in again',
         401,
         {},
-        AUTH_ERROR_CODES.AUTH_SESSION_REVOKED)
+        AUTH_ERROR_CODES.AUTH_SESSION_REVOKED,
+      )
     }
-    
-    const revokeAllAuthSession = await AuthRepo.revokeAuthSessionFamily(findSession?.user_id as string)
-    
+
+    await AuthRepo.revokeAuthSessionFamily(data.sub)
   }
+
+  static UserDetails = async (data: AccessTokenClaims) => {
+    const findUser = await AuthRepo.findUser({ id: data.sub })
+    if (!findUser) {
+      throw createError(
+        'Unable to get user',
+        401,
+        {},
+        AUTH_ERROR_CODES.INVALID_CREDENTIALS,
+      )
+    }
+
+    return {
+      public_id: findUser.public_id,
+      full_name: findUser.full_name,
+      email: findUser.email,
+      phone: findUser.phone,
+      role: findUser.role,
+      status: findUser.status,
+      last_login_at: findUser.last_login_at,
+      created_at: findUser.created_at,
+      updated_at: findUser.updated_at,
+    }
+  }
+
+  static EditUserDetails = async () => {}
 }
 
 export default AuthService

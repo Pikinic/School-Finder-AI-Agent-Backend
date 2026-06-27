@@ -7,7 +7,28 @@ import { AuthenticateMiddleware } from '../../middleware/authenticate'
 
 export const authRouter: Router = express.Router()
 
-authRouter.post('/login', validate(loginSchema), clientInfo, AuthController.Login)
-authRouter.post('/refresh', validateRefreshToken(refreshTokenSchema), clientInfo, AuthController.Refresh)
-authRouter.post("/logout", AuthenticateMiddleware, validateRefreshToken(refreshTokenSchema),  AuthController.Logout)
-authRouter.post("/logout-all", AuthenticateMiddleware, validateRefreshToken, AuthController.LogoutAll)
+authRouter.post(
+  '/login',
+  validate(loginSchema),
+  clientInfo,
+  AuthController.Login,
+)
+authRouter.post(
+  '/refresh',
+  validateRefreshToken(refreshTokenSchema),
+  clientInfo,
+  AuthController.Refresh,
+)
+authRouter.post(
+  '/logout',
+  validateRefreshToken(refreshTokenSchema),
+  AuthenticateMiddleware,
+  AuthController.Logout,
+)
+authRouter.post(
+  '/logout-all',
+  validateRefreshToken(refreshTokenSchema),
+  AuthenticateMiddleware,
+  AuthController.LogoutAll,
+)
+authRouter.get('/me', AuthenticateMiddleware, AuthController.UserDetails)

@@ -1,22 +1,26 @@
-import { NextFunction, Request, Response } from "express"
-import { decodeAcessToken } from "../common/security/token"
-import { createError } from "../common/errors/AppError"
-import { AUTH_ERROR_CODES } from "../common/errors/errorCodes"
-export const AuthenticateMiddleware = async (req:Request, res:Response, next:NextFunction)=>{
-try {
-    const accessToken = req.headers.authorization?.split(" ")[1] as string
-  
-    if(accessToken == ""){
-        return next(createError("Not authorized", 401, {}, AUTH_ERROR_CODES.TOKEN_INVALID))
-       
+import type { NextFunction, Request, Response } from 'express'
+import { createError } from '../common/errors/AppError'
+import { AUTH_ERROR_CODES } from '../common/errors/errorCodes'
+import { decodeAcessToken } from '../common/security/token'
+import type { AccessTokenClaims } from '../modules/auth/auth.types'
+
+export const AuthenticateMiddleware = (
+  req: Request,
+  _res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const [scheme, accessToken] = req.headers.authorization?.split(' ') ?? []
+
+    if (scheme !== 'Bearer' || !accessToken) {
+      return next(
+        createError('Not authorized', 401, {}, AUTH_ERROR_CODES.TOKEN_MISSING),
+      )
     }
 
-    const tokenData =  decodeAcessToken(accessToken)
-    console.log(tokenData)
-    req.body = tokenData
+    req.auth = decodeAcessToken(accessToken) as AccessTokenClaims
     next()
-
-} catch (error) {
-  next(error)
-}
+  } catch (error) {
+    next(error)
+  }
 }

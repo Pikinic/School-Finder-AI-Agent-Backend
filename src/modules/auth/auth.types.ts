@@ -27,12 +27,13 @@ export type RotateRefreshTokenData = {
   hashedRefreshToken: string
 }
 
-export type AccesTokenT = {
+export type AccessTokenClaims = {
   sub: string
   session_Id: string
   role: string
   token_version: number
-  refreshToken:string
 }
 
-
+export type AuthenticatedRefreshT = AccessTokenClaims & {
+  refreshToken: string
+}
