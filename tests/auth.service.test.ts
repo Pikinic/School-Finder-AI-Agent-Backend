@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AUTH_ERROR_CODES } from '../src/common/errors/errorCodes'
-import { verifyPassword } from '../src/common/security/password'
+import { hashPassword, verifyPassword } from '../src/common/security/password'
 import {
   generateAcessToken,
   generateRefreshToken,
@@ -20,10 +20,12 @@ vi.mock('../src/modules/auth/auth.repository', () => ({
     revokeAuthSessionFamily: vi.fn(),
     findAuthSessionById: vi.fn(),
     updateUserDetails: vi.fn(),
+    changePasswordAndRotateSessions: vi.fn(),
   },
 }))
 
 vi.mock('../src/common/security/password', () => ({
+  hashPassword: vi.fn(),
   verifyPassword: vi.fn(),
 }))
 
@@ -37,6 +39,7 @@ vi.mock('../src/common/security/tokenHash', () => ({
 }))
 
 const authRepoMock = vi.mocked(AuthRepo)
+const hashPasswordMock = vi.mocked(hashPassword)
 const verifyPasswordMock = vi.mocked(verifyPassword)
 const generateAcessTokenMock = vi.mocked(generateAcessToken)
 const generateRefreshTokenMock = vi.mocked(generateRefreshToken)
@@ -520,5 +523,166 @@ describe('AuthService.EditUserDetails', () => {
       code: AUTH_ERROR_CODES.INVALID_CREDENTIALS,
     })
     expect(authRepoMock.updateUserDetails).not.toHaveBeenCalled()
+  })
+})
+
+describe('AuthService.ChangePassword', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-06-21T00:00:00.000Z'))
+
+    authRepoMock.findUser.mockResolvedValue(activeUser)
+    authRepoMock.changePasswordAndRotateSessions.mockResolvedValue({
+      ...activeUser,
+      password_hash: 'new-argon-hash',
+      token_version: 1,
+      password_changed_at: new Date('2026-06-21T00:00:00.000Z'),
+      updated_at: new Date('2026-06-21T00:00:00.000Z'),
+    })
+    verifyPasswordMock.mockResolvedValueOnce(true).mockResolvedValueOnce(false)
+    hashPasswordMock.mockResolvedValue('new-argon-hash')
+    generateRefreshTokenMock.mockReturnValue('new-raw-refresh-token')
+    hashRefreshTokenMock.mockReturnValue('new-hashed-refresh-token')
+    generateAcessTokenMock.mockReturnValue('new-access-token')
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('updates the password, revokes other sessions, rotates the current refresh token, and returns a fresh access token', async () => {
+    const result = await AuthService.ChangePassword(
+      {
+        sub: activeUser.id,
+        session_Id: activeSession.id,
+        role: activeUser.role,
+        token_version: activeUser.token_version,
+      },
+      {
+        currentPassword: 'CorrectPass123',
+        newPassword: 'NewCorrectPass123',
+        confirmNewPassword: 'NewCorrectPass123',
+      },
+    )
+
+    expect(verifyPasswordMock).toHaveBeenNthCalledWith(
+      1,
+      activeUser.password_hash,
+      'CorrectPass123',
+    )
+    expect(verifyPasswordMock).toHaveBeenNthCalledWith(
+      2,
+      activeUser.password_hash,
+      'NewCorrectPass123',
+    )
+    expect(hashPasswordMock).toHaveBeenCalledWith('NewCorrectPass123')
+    expect(hashRefreshTokenMock).toHaveBeenCalledWith('new-raw-refresh-token')
+    expect(authRepoMock.changePasswordAndRotateSessions).toHaveBeenCalledWith({
+      userId: activeUser.id,
+      currentSessionId: activeSession.id,
+      newPasswordHash: 'new-argon-hash',
+      newRefreshTokenHash: 'new-hashed-refresh-token',
+      currentTokenVersion: 0,
+      changedAt: new Date('2026-06-21T00:00:00.000Z'),
+    })
+    expect(generateAcessTokenMock).toHaveBeenCalledWith(
+      activeUser.id,
+      activeSession.id,
+      activeUser.role,
+      1,
+    )
+    expect(result).toEqual({
+      user: {
+        public_id: activeUser.public_id,
+        full_name: activeUser.full_name,
+        email: activeUser.email,
+        phone: activeUser.phone,
+        role: activeUser.role,
+        status: activeUser.status,
+        last_login_at: activeUser.last_login_at,
+        created_at: activeUser.created_at,
+        updated_at: new Date('2026-06-21T00:00:00.000Z'),
+      },
+      accessToken: 'new-access-token',
+      refreshToken: 'new-raw-refresh-token',
+    })
+  })
+
+  it('rejects mismatched confirmation before touching password storage', async () => {
+    await expect(
+      AuthService.ChangePassword(
+        {
+          sub: activeUser.id,
+          session_Id: activeSession.id,
+          role: activeUser.role,
+          token_version: activeUser.token_version,
+        },
+        {
+          currentPassword: 'CorrectPass123',
+          newPassword: 'NewCorrectPass123',
+          confirmNewPassword: 'DifferentPass123',
+        },
+      ),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      code: 'VALIDATION_ERROR',
+    })
+    expect(authRepoMock.findUser).not.toHaveBeenCalled()
+    expect(authRepoMock.changePasswordAndRotateSessions).not.toHaveBeenCalled()
+  })
+
+  it('rejects invalid current passwords with a generic credential error', async () => {
+    verifyPasswordMock.mockReset()
+    verifyPasswordMock.mockResolvedValue(false)
+
+    await expect(
+      AuthService.ChangePassword(
+        {
+          sub: activeUser.id,
+          session_Id: activeSession.id,
+          role: activeUser.role,
+          token_version: activeUser.token_version,
+        },
+        {
+          currentPassword: 'WrongPass123',
+          newPassword: 'NewCorrectPass123',
+          confirmNewPassword: 'NewCorrectPass123',
+        },
+      ),
+    ).rejects.toMatchObject({
+      statusCode: 401,
+      code: AUTH_ERROR_CODES.INVALID_CREDENTIALS,
+      message: 'Invalid current password',
+    })
+    expect(hashPasswordMock).not.toHaveBeenCalled()
+    expect(authRepoMock.changePasswordAndRotateSessions).not.toHaveBeenCalled()
+  })
+
+  it('rejects reusing the current password', async () => {
+    verifyPasswordMock.mockReset()
+    verifyPasswordMock.mockResolvedValue(true)
+
+    await expect(
+      AuthService.ChangePassword(
+        {
+          sub: activeUser.id,
+          session_Id: activeSession.id,
+          role: activeUser.role,
+          token_version: activeUser.token_version,
+        },
+        {
+          currentPassword: 'CorrectPass123',
+          newPassword: 'CorrectPass123',
+          confirmNewPassword: 'CorrectPass123',
+        },
+      ),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      code: 'VALIDATION_ERROR',
+      message: 'New password must be different from the current password',
+    })
+    expect(hashPasswordMock).not.toHaveBeenCalled()
+    expect(authRepoMock.changePasswordAndRotateSessions).not.toHaveBeenCalled()
   })
 })

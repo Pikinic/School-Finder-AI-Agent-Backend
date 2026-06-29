@@ -5,7 +5,7 @@ extendZodWithOpenApi(z)
 
 const loginSchema = z.object({
   email: z.string().trim().min(2).max(160).email(),
-  password: z.string().min(12),
+  password: z.string().min(8),
 })
 
 const forgetPasswordSchema = z.object({
@@ -25,9 +25,25 @@ const editUserDetailsSchema = z
     message: 'At least one profile field is required',
   })
 
+const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(8),
+    newPassword: z
+      .string()
+      .min(8)
+      .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+      .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
+      .regex(/[0-9]/, 'Password must contain at least one number'),
+    confirmNewPassword: z.string().min(8),
+  })
+  .refine((data) => data.newPassword === data.confirmNewPassword, {
+    message: 'Passwords do not match',
+    path: ['confirmNewPassword'],
+  })
 export {
   loginSchema,
   forgetPasswordSchema,
   refreshTokenSchema,
   editUserDetailsSchema,
+  changePasswordSchema,
 }

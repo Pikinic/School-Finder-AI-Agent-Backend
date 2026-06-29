@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { AUTH_ERROR_CODES } from '../../common/errors/errorCodes'
 import { createError } from '../../common/errors/AppError'
-import { verifyPassword } from '../../common/security/password'
+import { hashPassword, verifyPassword } from '../../common/security/password'
 import {
   generateAcessToken,
   generateRefreshToken,
@@ -10,12 +10,15 @@ import { hashRefreshToken } from '../../common/security/tokenHash'
 import AuthRepo from './auth.repository'
 import type {
   AccessTokenClaims,
+  ChangePasswordData,
   AuthenticatedRefreshT,
   AuthSessionDbData,
   EditUserDetailsT,
   LoginT,
   RefreshT,
 } from './auth.types'
+
+const passwordPolicyRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/
 
 const toSafeUser = (user: {
   public_id: string
@@ -291,6 +294,85 @@ class AuthService {
 
     const updatedUser = await AuthRepo.updateUserDetails(auth.sub, data)
     return toSafeUser(updatedUser)
+  }
+
+  static ChangePassword = async (
+    auth: AccessTokenClaims,
+    data: ChangePasswordData,
+  ) => {
+    if (data.newPassword !== data.confirmNewPassword) {
+      throw createError('Passwords do not match', 400, {}, 'VALIDATION_ERROR')
+    }
+
+    if (!passwordPolicyRegex.test(data.newPassword)) {
+      throw createError(
+        'Password must be at least 8 characters and include uppercase, lowercase, and number characters',
+        400,
+        {},
+        'VALIDATION_ERROR',
+      )
+    }
+
+    const user = await AuthRepo.findUser({ id: auth.sub })
+    if (!user?.password_hash) {
+      throw createError(
+        'Invalid current password',
+        401,
+        {},
+        AUTH_ERROR_CODES.INVALID_CREDENTIALS,
+      )
+    }
+
+    const passwordMatches = await verifyPassword(
+      user.password_hash,
+      data.currentPassword,
+    )
+    if (!passwordMatches) {
+      throw createError(
+        'Invalid current password',
+        401,
+        {},
+        AUTH_ERROR_CODES.INVALID_CREDENTIALS,
+      )
+    }
+
+    const newPasswordMatchesCurrent = await verifyPassword(
+      user.password_hash,
+      data.newPassword,
+    )
+    if (newPasswordMatchesCurrent) {
+      throw createError(
+        'New password must be different from the current password',
+        400,
+        {},
+        'VALIDATION_ERROR',
+      )
+    }
+
+    const newPasswordHash = await hashPassword(data.newPassword)
+    const newRefreshToken = generateRefreshToken()
+    const newRefreshTokenHash = hashRefreshToken(newRefreshToken)
+    const updatedUser = await AuthRepo.changePasswordAndRotateSessions({
+      userId: user.id,
+      currentSessionId: auth.session_Id,
+      newPasswordHash,
+      newRefreshTokenHash,
+      currentTokenVersion: user.token_version,
+      changedAt: new Date(),
+    })
+
+    const accessToken = generateAcessToken(
+      updatedUser.id,
+      auth.session_Id,
+      updatedUser.role,
+      updatedUser.token_version,
+    )
+
+    return {
+      user: toSafeUser(updatedUser),
+      accessToken,
+      refreshToken: newRefreshToken,
+    }
   }
 }
 

@@ -2,6 +2,7 @@ import { createError } from '../../common/errors/AppError'
 import prisma from '../../database/prisma'
 import type {
   AuthSessionDbData,
+  ChangePasswordTransactionData,
   EditUserDetailsT,
   RotateRefreshTokenData,
 } from './auth.types'
@@ -99,6 +100,44 @@ class AuthRepo {
         ...(data.fullName !== undefined && { full_name: data.fullName }),
         ...(data.phone !== undefined && { phone: data.phone }),
       },
+    })
+  }
+
+  static async changePasswordAndRotateSessions(
+    data: ChangePasswordTransactionData,
+  ) {
+    return prisma.$transaction(async (tx) => {
+      const updatedUser = await tx.users.update({
+        where: { id: data.userId },
+        data: {
+          password_hash: data.newPasswordHash,
+          token_version: data.currentTokenVersion + 1,
+          password_changed_at: data.changedAt,
+        },
+      })
+
+      await tx.auth_Sessions.updateMany({
+        where: {
+          user_id: data.userId,
+          revoked_at: null,
+          id: {
+            not: data.currentSessionId,
+          },
+        },
+        data: {
+          revoked_at: data.changedAt,
+        },
+      })
+
+      await tx.auth_Sessions.update({
+        where: { id: data.currentSessionId },
+        data: {
+          refresh_token_hash: data.newRefreshTokenHash,
+          last_used_at: data.changedAt,
+        },
+      })
+
+      return updatedUser
     })
   }
 }

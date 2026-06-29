@@ -4,6 +4,7 @@ import {
 } from '@asteasolutions/zod-to-openapi'
 import { z } from 'zod'
 import {
+  changePasswordSchema,
   editUserDetailsSchema,
   loginSchema,
 } from '../modules/auth/auth.schemas'
@@ -75,21 +76,38 @@ const emptySuccessResponseSchema = registry.register(
   }),
 )
 
+const safeUserSchema = z.object({
+  public_id: z.string(),
+  full_name: z.string(),
+  email: z.string().email(),
+  phone: z.string().nullable(),
+  role: z.enum(['ADMIN', 'ADVISOR', 'OPERATIONS']),
+  status: z.enum(['INVITED', 'ACTIVE', 'DISABLED']),
+  last_login_at: z.date().nullable(),
+  created_at: z.date(),
+  updated_at: z.date(),
+})
+
 const userDetailsResponseSchema = registry.register(
   'UserDetailsResponse',
   z.object({
     success: z.literal(true),
     message: z.string(),
+    data: safeUserSchema,
+    meta: z.object({
+      requestId: z.string(),
+    }),
+  }),
+)
+
+const changePasswordResponseSchema = registry.register(
+  'ChangePasswordResponse',
+  z.object({
+    success: z.literal(true),
+    message: z.string(),
     data: z.object({
-      public_id: z.string(),
-      full_name: z.string(),
-      email: z.string().email(),
-      phone: z.string().nullable(),
-      role: z.enum(['ADMIN', 'ADVISOR', 'OPERATIONS']),
-      status: z.enum(['INVITED', 'ACTIVE', 'DISABLED']),
-      last_login_at: z.date().nullable(),
-      created_at: z.date(),
-      updated_at: z.date(),
+      accessToken: z.string(),
+      user: safeUserSchema,
     }),
     meta: z.object({
       requestId: z.string(),
@@ -101,6 +119,10 @@ const registeredLoginSchema = registry.register('LoginRequest', loginSchema)
 const registeredEditUserDetailsSchema = registry.register(
   'EditUserDetailsRequest',
   editUserDetailsSchema,
+)
+const registeredChangePasswordSchema = registry.register(
+  'ChangePasswordRequest',
+  changePasswordSchema,
 )
 const refreshCookieParameter = z.object({
   refreshToken: z
@@ -387,6 +409,69 @@ registry.registerPath({
     401: {
       description:
         'Bearer token is missing or invalid, the session was revoked or expired, or the user was not found.',
+      content: {
+        'application/json': {
+          schema: errorResponseSchema,
+        },
+      },
+    },
+    403: {
+      description: 'Account is not active.',
+      content: {
+        'application/json': {
+          schema: errorResponseSchema,
+        },
+      },
+    },
+  },
+})
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/v1/auth/change-password',
+  tags: ['Auth'],
+  security: [{ bearerAuth: [] }],
+  summary: 'Change the authenticated staff password',
+  description:
+    'Requires a bearer access token. Verifies the current password, enforces the password policy, updates the password hash and token version, revokes every other active refresh session, rotates the current refresh-token cookie, and returns a fresh access token.',
+  request: {
+    body: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: registeredChangePasswordSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description:
+        'Password changed, other active sessions revoked, and current refreshToken cookie rotated.',
+      headers: {
+        'Set-Cookie': {
+          schema: { type: 'string' },
+          description:
+            'Rotated HttpOnly refreshToken cookie; Secure in production.',
+        },
+      },
+      content: {
+        'application/json': {
+          schema: changePasswordResponseSchema,
+        },
+      },
+    },
+    400: {
+      description: 'Request validation failed.',
+      content: {
+        'application/json': {
+          schema: errorResponseSchema,
+        },
+      },
+    },
+    401: {
+      description:
+        'Bearer token is missing or invalid, the current password is wrong, the session was revoked or expired, or the user was not found.',
       content: {
         'application/json': {
           schema: errorResponseSchema,

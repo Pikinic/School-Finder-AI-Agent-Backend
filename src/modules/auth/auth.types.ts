@@ -42,3 +42,18 @@ export type AccessTokenClaims = {
 export type AuthenticatedRefreshT = AccessTokenClaims & {
   refreshToken: string
 }
+
+export type ChangePasswordData = {
+  currentPassword: string
+  newPassword: string
+  confirmNewPassword: string
+}
+
+export type ChangePasswordTransactionData = {
+  userId: string
+  currentSessionId: string
+  newPasswordHash: string
+  newRefreshTokenHash: string
+  currentTokenVersion: number
+  changedAt: Date
+}

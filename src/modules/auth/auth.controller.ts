@@ -2,7 +2,12 @@ import type { NextFunction, Request, Response } from 'express'
 import { successResponse } from '../../http/response'
 import { clearCookie, setCookie } from '../../http/cookie'
 import AuthService from './auth.service'
-import type { EditUserDetailsT, LoginT, RefreshT } from './auth.types'
+import type {
+  ChangePasswordData,
+  EditUserDetailsT,
+  LoginT,
+  RefreshT,
+} from './auth.types'
 
 const getRefreshTokenFromRequest = (req: Request): string => {
   return (req.body as { refreshToken: string }).refreshToken
@@ -138,6 +143,37 @@ class AuthController {
             { requestId: req.id },
           ),
         )
+    } catch (error) {
+      next(error)
+    }
+  }
+
+  static ChangePassword = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    try {
+      if (!req.auth) {
+        throw new Error('Authenticated request missing auth claims')
+      }
+
+      const changePasswordResult = await AuthService.ChangePassword(
+        req.auth,
+        req.body as ChangePasswordData,
+      )
+      setCookie(res, changePasswordResult.refreshToken)
+      res.status(200).send(
+        successResponse(
+          true,
+          'Password changed successfully',
+          {
+            user: changePasswordResult.user,
+            accessToken: changePasswordResult.accessToken,
+          },
+          { requestId: req.id },
+        ),
+      )
     } catch (error) {
       next(error)
     }

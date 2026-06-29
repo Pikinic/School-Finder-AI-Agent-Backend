@@ -22,6 +22,7 @@ vi.mock('../src/modules/auth/auth.service', () => ({
     LogoutAll: vi.fn(),
     UserDetails: vi.fn(),
     EditUserDetails: vi.fn(),
+    ChangePassword: vi.fn(),
   },
 }))
 
@@ -60,6 +61,22 @@ type UserDetailsResponseBody = {
     public_id: string
     email: string
     role: string
+  }
+  meta: {
+    requestId: unknown
+  }
+}
+
+type ChangePasswordResponseBody = {
+  success: boolean
+  message: string
+  data: {
+    accessToken: string
+    user: {
+      public_id: string
+      email: string
+      role: string
+    }
   }
   meta: {
     requestId: unknown
@@ -478,5 +495,120 @@ describe('PATCH /api/v1/auth/me', () => {
       code: 'AUTH_SESSION_REVOKED',
     })
     expect(AuthService.EditUserDetails).not.toHaveBeenCalled()
+  })
+})
+
+describe('POST /api/v1/auth/change-password', () => {
+  const testApp: Express = app
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockAuthenticatedRequest()
+    vi.mocked(AuthService.ChangePassword).mockResolvedValue({
+      user: {
+        public_id: 'usr_123',
+        full_name: 'Admin User',
+        email: 'admin@example.com',
+        phone: null,
+        role: 'ADMIN',
+        status: 'ACTIVE',
+        last_login_at: null,
+        created_at: new Date('2026-06-01T00:00:00.000Z'),
+        updated_at: new Date('2026-06-21T00:00:00.000Z'),
+      },
+      accessToken: 'new-access-token',
+      refreshToken: 'new-raw-refresh-token',
+    })
+  })
+
+  it('changes the authenticated user password and rotates the refresh cookie', async () => {
+    const response = await request(testApp)
+      .post('/api/v1/auth/change-password')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        currentPassword: 'CorrectPass123',
+        newPassword: 'NewCorrectPass123',
+        confirmNewPassword: 'NewCorrectPass123',
+      })
+      .expect(200)
+
+    const responseBody = response.body as unknown as ChangePasswordResponseBody
+    const setCookie = getFirstSetCookie(response.headers)
+
+    expect(responseBody).toMatchObject({
+      success: true,
+      message: 'Password changed successfully',
+      data: {
+        accessToken: 'new-access-token',
+        user: {
+          public_id: 'usr_123',
+          email: 'admin@example.com',
+          role: 'ADMIN',
+        },
+      },
+    })
+    expect(typeof responseBody.meta.requestId).toBe('string')
+    expect(setCookie).toContain('refreshToken=new-raw-refresh-token')
+    expect(setCookie).toContain('HttpOnly')
+    expect(AuthService.ChangePassword).toHaveBeenCalledWith(
+      {
+        sub: 'user-id',
+        session_Id: 'session-id',
+        role: 'ADMIN',
+        token_version: 0,
+        iat: expect.any(Number) as number,
+        exp: expect.any(Number) as number,
+      },
+      {
+        currentPassword: 'CorrectPass123',
+        newPassword: 'NewCorrectPass123',
+        confirmNewPassword: 'NewCorrectPass123',
+      },
+    )
+  })
+
+  it('rejects weak replacement passwords before calling the service', async () => {
+    const response = await request(testApp)
+      .post('/api/v1/auth/change-password')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        currentPassword: 'CorrectPass123',
+        newPassword: 'weak-password',
+        confirmNewPassword: 'weak-password',
+      })
+      .expect(400)
+
+    const responseBody = response.body as unknown as ErrorResponseBody
+
+    expect(responseBody.error).toMatchObject({
+      message: 'Validation failed',
+      code: 'VALIDATION_ERROR',
+    })
+    expect(AuthService.ChangePassword).not.toHaveBeenCalled()
+  })
+
+  it('rejects revoked access-token sessions before changing the password', async () => {
+    authRepoMock.findAuthSessionById.mockResolvedValue({
+      ...activeSession,
+      revoked_at: new Date('2026-06-20T00:00:00.000Z'),
+    })
+
+    const response = await request(testApp)
+      .post('/api/v1/auth/change-password')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        currentPassword: 'CorrectPass123',
+        newPassword: 'NewCorrectPass123',
+        confirmNewPassword: 'NewCorrectPass123',
+      })
+      .expect(401)
+
+    const responseBody = response.body as unknown as ErrorResponseBody
+
+    expect(responseBody.error).toMatchObject({
+      message: 'Authentication session revoked, please log in again',
+      code: 'AUTH_SESSION_REVOKED',
+    })
+    expect(AuthService.ChangePassword).not.toHaveBeenCalled()
   })
 })

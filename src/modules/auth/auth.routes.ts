@@ -3,6 +3,7 @@ import { validate, validateRefreshToken } from '../../middleware/validate'
 import AuthController from './auth.controller'
 import {
   editUserDetailsSchema,
+  changePasswordSchema,
   loginSchema,
   refreshTokenSchema,
 } from './auth.schemas'
@@ -36,9 +37,17 @@ authRouter.post(
   AuthController.LogoutAll,
 )
 authRouter.get('/me', AuthenticateMiddleware, AuthController.UserDetails)
+
 authRouter.patch(
   '/me',
   validate(editUserDetailsSchema),
   AuthenticateMiddleware,
   AuthController.EditUserDetails,
+)
+
+authRouter.post(
+  '/change-password',
+  validate(changePasswordSchema),
+  AuthenticateMiddleware,
+  AuthController.ChangePassword,
 )
