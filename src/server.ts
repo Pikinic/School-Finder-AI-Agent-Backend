@@ -1,19 +1,17 @@
 import app from './app'
-import  http from 'http'
+import http from 'http'
 import env from './config/env'
+import { logger } from './config/logger'
 
+const server = http.createServer(app)
 
-const server  = http.createServer(app)
-
-server.listen(env.port, ()=>{
-    console.log(`Server is running on port ${env.port}`)
+server.listen(env.port, () => {
+  logger.info({ port: env.port }, 'Server started')
 })
 
-
-
-process.on('SIGABRT', ()=>{
-    console.log('Server closed')
-    server.close(()=>{
-        process.exit(0)
-    })
+process.on('SIGABRT', () => {
+  logger.info('Server closing')
+  server.close(() => {
+    process.exit(0)
+  })
 })
