@@ -8,6 +8,7 @@ import type {
   ForgotPasswordData,
   LoginT,
   RefreshT,
+  ResetPasswordData,
 } from './auth.types'
 
 const getRefreshTokenFromRequest = (req: Request): string => {
@@ -214,6 +215,29 @@ class AuthController {
 
       res.status(200).send(
         successResponse(true, 'Password reset token is valid', verifiedToken, {
+          requestId: req.id,
+        }),
+      )
+    } catch (error) {
+      next(error)
+    }
+  }
+
+  static ResetPassword = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    try {
+      const { token } = req.params
+      await AuthService.ResetPassword(
+        token as string,
+        req.body as ResetPasswordData,
+      )
+
+      clearCookie(res)
+      res.status(200).send(
+        successResponse(true, 'Password reset successfully', undefined, {
           requestId: req.id,
         }),
       )

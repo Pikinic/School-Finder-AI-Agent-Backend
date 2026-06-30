@@ -25,6 +25,7 @@ import type {
   LoginT,
   RefreshT,
   ForgotPasswordData,
+  ResetPasswordData,
   VerifiedResetPasswordToken,
 } from './auth.types'
 
@@ -486,6 +487,96 @@ class AuthService {
       email: resetToken.user.email,
       fullName: resetToken.user.full_name,
     }
+  }
+
+  static ResetPassword = async (token: string, data: ResetPasswordData) => {
+    if (data.newPassword !== data.confirmNewPassword) {
+      throw createError('Passwords do not match', 400, {}, 'VALIDATION_ERROR')
+    }
+
+    if (!passwordPolicyRegex.test(data.newPassword)) {
+      throw createError(
+        'Password must be at least 8 characters and include uppercase, lowercase, and number characters',
+        400,
+        {},
+        'VALIDATION_ERROR',
+      )
+    }
+
+    if (!token || !opaqueTokenRegex.test(token)) {
+      throw createError(
+        'Password reset token is invalid',
+        401,
+        {},
+        AUTH_ERROR_CODES.TOKEN_INVALID,
+      )
+    }
+
+    const tokenHash = hashOpaqueToken(token)
+    const resetToken = await AuthRepo.findPasswordResetTokenByHash(tokenHash)
+
+    if (!resetToken || resetToken.used_at) {
+      throw createError(
+        'Password reset token is invalid',
+        401,
+        {},
+        AUTH_ERROR_CODES.TOKEN_INVALID,
+      )
+    }
+
+    if (resetToken.expires_at <= new Date()) {
+      throw createError(
+        'Password reset token has expired',
+        401,
+        {},
+        AUTH_ERROR_CODES.TOKEN_EXPIRED,
+      )
+    }
+
+    if (resetToken.user.status !== 'ACTIVE') {
+      throw createError(
+        'Account is not active',
+        403,
+        {},
+        AUTH_ERROR_CODES.ACCOUNT_DISABLED,
+      )
+    }
+
+    if (resetToken.user.password_hash) {
+      const newPasswordMatchesCurrent = await verifyPassword(
+        resetToken.user.password_hash,
+        data.newPassword,
+      )
+
+      if (newPasswordMatchesCurrent) {
+        throw createError(
+          'New password must be different from the current password',
+          400,
+          {},
+          'VALIDATION_ERROR',
+        )
+      }
+    }
+
+    const changedAt = new Date()
+    const newPasswordHash = await hashPassword(data.newPassword)
+
+    await AuthRepo.resetPasswordAndRevokeSessions({
+      resetTokenId: resetToken.id,
+      userId: resetToken.user_id,
+      newPasswordHash,
+      currentTokenVersion: resetToken.user.token_version,
+      changedAt,
+    })
+
+    logger.info(
+      {
+        userId: resetToken.user_id,
+        passwordResetTokenId: resetToken.id,
+        passwordChangedAt: changedAt,
+      },
+      'Password reset completed',
+    )
   }
 }
 

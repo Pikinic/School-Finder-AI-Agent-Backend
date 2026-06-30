@@ -28,6 +28,7 @@ vi.mock('../src/modules/auth/auth.repository', () => ({
     changePasswordAndRotateSessions: vi.fn(),
     createPasswordResetToken: vi.fn(),
     findPasswordResetTokenByHash: vi.fn(),
+    resetPasswordAndRevokeSessions: vi.fn(),
   },
 }))
 
@@ -904,5 +905,189 @@ describe('AuthService.VerifyResetPasswordToken', () => {
       statusCode: 403,
       code: AUTH_ERROR_CODES.ACCOUNT_DISABLED,
     })
+  })
+})
+
+describe('AuthService.ResetPassword', () => {
+  const resetTokenRecord = {
+    id: 'reset-token-id',
+    user_id: activeUser.id,
+    token_hash: 'hashed-reset-token',
+    expires_at: new Date('2026-06-22T01:00:00.000Z'),
+    used_at: null,
+    created_at: new Date('2026-06-22T00:00:00.000Z'),
+    user: activeUser,
+  } as const
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-06-22T00:30:00.000Z'))
+
+    hashOpaqueTokenMock.mockReturnValue('hashed-reset-token')
+    authRepoMock.findPasswordResetTokenByHash.mockResolvedValue(
+      resetTokenRecord,
+    )
+    verifyPasswordMock.mockResolvedValue(false)
+    hashPasswordMock.mockResolvedValue('new-argon-hash')
+    authRepoMock.resetPasswordAndRevokeSessions.mockResolvedValue({
+      ...activeUser,
+      password_hash: 'new-argon-hash',
+      token_version: 1,
+      password_changed_at: new Date('2026-06-22T00:30:00.000Z'),
+      updated_at: new Date('2026-06-22T00:30:00.000Z'),
+    })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('consumes the reset token, updates the password, and revokes active sessions', async () => {
+    await AuthService.ResetPassword('a'.repeat(128), {
+      newPassword: 'NewCorrectPass123',
+      confirmNewPassword: 'NewCorrectPass123',
+    })
+
+    expect(hashOpaqueTokenMock).toHaveBeenCalledWith('a'.repeat(128))
+    expect(authRepoMock.findPasswordResetTokenByHash).toHaveBeenCalledWith(
+      'hashed-reset-token',
+    )
+    expect(verifyPasswordMock).toHaveBeenCalledWith(
+      activeUser.password_hash,
+      'NewCorrectPass123',
+    )
+    expect(hashPasswordMock).toHaveBeenCalledWith('NewCorrectPass123')
+    expect(authRepoMock.resetPasswordAndRevokeSessions).toHaveBeenCalledWith({
+      resetTokenId: resetTokenRecord.id,
+      userId: activeUser.id,
+      newPasswordHash: 'new-argon-hash',
+      currentTokenVersion: 0,
+      changedAt: new Date('2026-06-22T00:30:00.000Z'),
+    })
+  })
+
+  it('rejects mismatched confirmation before hashing the token', async () => {
+    await expect(
+      AuthService.ResetPassword('a'.repeat(128), {
+        newPassword: 'NewCorrectPass123',
+        confirmNewPassword: 'DifferentPass123',
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      code: 'VALIDATION_ERROR',
+    })
+
+    expect(hashOpaqueTokenMock).not.toHaveBeenCalled()
+    expect(authRepoMock.resetPasswordAndRevokeSessions).not.toHaveBeenCalled()
+  })
+
+  it('rejects malformed tokens before looking up reset storage', async () => {
+    await expect(
+      AuthService.ResetPassword('not-a-reset-token', {
+        newPassword: 'NewCorrectPass123',
+        confirmNewPassword: 'NewCorrectPass123',
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 401,
+      code: AUTH_ERROR_CODES.TOKEN_INVALID,
+    })
+
+    expect(hashOpaqueTokenMock).not.toHaveBeenCalled()
+    expect(authRepoMock.findPasswordResetTokenByHash).not.toHaveBeenCalled()
+  })
+
+  it('rejects unknown reset tokens', async () => {
+    authRepoMock.findPasswordResetTokenByHash.mockResolvedValue(null)
+
+    await expect(
+      AuthService.ResetPassword('a'.repeat(128), {
+        newPassword: 'NewCorrectPass123',
+        confirmNewPassword: 'NewCorrectPass123',
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 401,
+      code: AUTH_ERROR_CODES.TOKEN_INVALID,
+    })
+
+    expect(authRepoMock.resetPasswordAndRevokeSessions).not.toHaveBeenCalled()
+  })
+
+  it('rejects used reset tokens', async () => {
+    authRepoMock.findPasswordResetTokenByHash.mockResolvedValue({
+      ...resetTokenRecord,
+      used_at: new Date('2026-06-22T00:15:00.000Z'),
+    })
+
+    await expect(
+      AuthService.ResetPassword('a'.repeat(128), {
+        newPassword: 'NewCorrectPass123',
+        confirmNewPassword: 'NewCorrectPass123',
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 401,
+      code: AUTH_ERROR_CODES.TOKEN_INVALID,
+    })
+
+    expect(authRepoMock.resetPasswordAndRevokeSessions).not.toHaveBeenCalled()
+  })
+
+  it('rejects expired reset tokens', async () => {
+    authRepoMock.findPasswordResetTokenByHash.mockResolvedValue({
+      ...resetTokenRecord,
+      expires_at: new Date('2026-06-22T00:00:00.000Z'),
+    })
+
+    await expect(
+      AuthService.ResetPassword('a'.repeat(128), {
+        newPassword: 'NewCorrectPass123',
+        confirmNewPassword: 'NewCorrectPass123',
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 401,
+      code: AUTH_ERROR_CODES.TOKEN_EXPIRED,
+    })
+
+    expect(authRepoMock.resetPasswordAndRevokeSessions).not.toHaveBeenCalled()
+  })
+
+  it('rejects reset tokens for inactive users', async () => {
+    authRepoMock.findPasswordResetTokenByHash.mockResolvedValue({
+      ...resetTokenRecord,
+      user: {
+        ...activeUser,
+        status: 'DISABLED',
+      },
+    })
+
+    await expect(
+      AuthService.ResetPassword('a'.repeat(128), {
+        newPassword: 'NewCorrectPass123',
+        confirmNewPassword: 'NewCorrectPass123',
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 403,
+      code: AUTH_ERROR_CODES.ACCOUNT_DISABLED,
+    })
+
+    expect(authRepoMock.resetPasswordAndRevokeSessions).not.toHaveBeenCalled()
+  })
+
+  it('rejects reusing the current password', async () => {
+    verifyPasswordMock.mockResolvedValue(true)
+
+    await expect(
+      AuthService.ResetPassword('a'.repeat(128), {
+        newPassword: 'CorrectPass123',
+        confirmNewPassword: 'CorrectPass123',
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      code: 'VALIDATION_ERROR',
+      message: 'New password must be different from the current password',
+    })
+
+    expect(hashPasswordMock).not.toHaveBeenCalled()
+    expect(authRepoMock.resetPasswordAndRevokeSessions).not.toHaveBeenCalled()
   })
 })

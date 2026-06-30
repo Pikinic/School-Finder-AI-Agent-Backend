@@ -11,6 +11,7 @@ import {
   forgotPasswordSchema,
   loginSchema,
   refreshTokenSchema,
+  resetPasswordSchema,
   resetPasswordTokenParamsSchema,
 } from './auth.schemas'
 import { clientInfo } from '../../middleware/clientInfo'
@@ -68,4 +69,11 @@ authRouter.get(
   '/reset-password/:token',
   validateParams(resetPasswordTokenParamsSchema),
   AuthController.VerifyResetPasswordToken,
+)
+
+authRouter.post(
+  '/reset-password/:token',
+  validateParams(resetPasswordTokenParamsSchema),
+  validate(resetPasswordSchema),
+  AuthController.ResetPassword,
 )

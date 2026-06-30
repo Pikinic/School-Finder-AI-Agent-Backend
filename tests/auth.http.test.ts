@@ -25,6 +25,7 @@ vi.mock('../src/modules/auth/auth.service', () => ({
     ChangePassword: vi.fn(),
     ForgotPassword: vi.fn(),
     VerifyResetPasswordToken: vi.fn(),
+    ResetPassword: vi.fn(),
   },
 }))
 
@@ -373,6 +374,98 @@ describe('GET /api/v1/auth/reset-password/:token', () => {
       code: 'VALIDATION_ERROR',
     })
     expect(AuthService.VerifyResetPasswordToken).not.toHaveBeenCalled()
+  })
+})
+
+describe('POST /api/v1/auth/reset-password/:token', () => {
+  const testApp: Express = app
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(AuthService.ResetPassword).mockResolvedValue(undefined)
+  })
+
+  it('resets the password, clears the refresh cookie, and returns an empty success response', async () => {
+    const token = 'a'.repeat(128)
+
+    const response = await request(testApp)
+      .post(`/api/v1/auth/reset-password/${token}`)
+      .set('Cookie', 'refreshToken=' + 'b'.repeat(128))
+      .send({
+        newPassword: 'NewCorrectPass123',
+        confirmNewPassword: 'NewCorrectPass123',
+      })
+      .expect(200)
+
+    const setCookie = getFirstSetCookie(response.headers)
+
+    expect(response.body).toMatchObject({
+      success: true,
+      message: 'Password reset successfully',
+      meta: {
+        requestId: expect.any(String) as string,
+      },
+    })
+    expect(setCookie).toContain('refreshToken=')
+    expect(setCookie).toContain('Expires=Thu, 01 Jan 1970')
+    expect(AuthService.ResetPassword).toHaveBeenCalledWith(token, {
+      newPassword: 'NewCorrectPass123',
+      confirmNewPassword: 'NewCorrectPass123',
+    })
+  })
+
+  it('rejects malformed reset tokens before calling the service', async () => {
+    const response = await request(testApp)
+      .post('/api/v1/auth/reset-password/not-a-token')
+      .send({
+        newPassword: 'NewCorrectPass123',
+        confirmNewPassword: 'NewCorrectPass123',
+      })
+      .expect(400)
+
+    const responseBody = response.body as unknown as ErrorResponseBody
+
+    expect(responseBody.error).toMatchObject({
+      message: 'Validation failed',
+      code: 'VALIDATION_ERROR',
+    })
+    expect(AuthService.ResetPassword).not.toHaveBeenCalled()
+  })
+
+  it('rejects weak replacement passwords before calling the service', async () => {
+    const response = await request(testApp)
+      .post(`/api/v1/auth/reset-password/${'a'.repeat(128)}`)
+      .send({
+        newPassword: 'weak-password',
+        confirmNewPassword: 'weak-password',
+      })
+      .expect(400)
+
+    const responseBody = response.body as unknown as ErrorResponseBody
+
+    expect(responseBody.error).toMatchObject({
+      message: 'Validation failed',
+      code: 'VALIDATION_ERROR',
+    })
+    expect(AuthService.ResetPassword).not.toHaveBeenCalled()
+  })
+
+  it('rejects mismatched password confirmation before calling the service', async () => {
+    const response = await request(testApp)
+      .post(`/api/v1/auth/reset-password/${'a'.repeat(128)}`)
+      .send({
+        newPassword: 'NewCorrectPass123',
+        confirmNewPassword: 'DifferentPass123',
+      })
+      .expect(400)
+
+    const responseBody = response.body as unknown as ErrorResponseBody
+
+    expect(responseBody.error).toMatchObject({
+      message: 'Validation failed',
+      code: 'VALIDATION_ERROR',
+    })
+    expect(AuthService.ResetPassword).not.toHaveBeenCalled()
   })
 })
 

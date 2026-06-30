@@ -49,6 +49,11 @@ export type ChangePasswordData = {
   confirmNewPassword: string
 }
 
+export type ResetPasswordData = {
+  newPassword: string
+  confirmNewPassword: string
+}
+
 export type ChangePasswordTransactionData = {
   userId: string
   currentSessionId: string
@@ -71,4 +76,12 @@ export type PasswordResetTokenDbData = {
 export type VerifiedResetPasswordToken = {
   email: string
   fullName: string
+}
+
+export type ResetPasswordTransactionData = {
+  resetTokenId: string
+  userId: string
+  newPasswordHash: string
+  currentTokenVersion: number
+  changedAt: Date
 }

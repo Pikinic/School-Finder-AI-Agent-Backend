@@ -8,6 +8,7 @@ import {
   editUserDetailsSchema,
   forgotPasswordSchema,
   loginSchema,
+  resetPasswordSchema,
   resetPasswordTokenParamsSchema,
 } from '../modules/auth/auth.schemas'
 
@@ -148,6 +149,10 @@ const registeredForgotPasswordSchema = registry.register(
 const registeredResetPasswordTokenParamsSchema = registry.register(
   'ResetPasswordTokenParams',
   resetPasswordTokenParamsSchema,
+)
+const registeredResetPasswordSchema = registry.register(
+  'ResetPasswordRequest',
+  resetPasswordSchema,
 )
 const refreshCookieParameter = z.object({
   refreshToken: z
@@ -334,6 +339,67 @@ registry.registerPath({
     },
     400: {
       description: 'Token path parameter is malformed.',
+      content: {
+        'application/json': {
+          schema: errorResponseSchema,
+        },
+      },
+    },
+    401: {
+      description: 'Token was not found, has already been used, or expired.',
+      content: {
+        'application/json': {
+          schema: errorResponseSchema,
+        },
+      },
+    },
+    403: {
+      description: 'The account is no longer active.',
+      content: {
+        'application/json': {
+          schema: errorResponseSchema,
+        },
+      },
+    },
+  },
+})
+registry.registerPath({
+  method: 'post',
+  path: '/api/v1/auth/reset-password/{token}',
+  tags: ['Auth'],
+  summary: 'Reset a staff password',
+  description:
+    'Validates a password-reset token and replacement password, consumes the reset token, updates the user password hash and token version, revokes all active refresh sessions for the user, and clears any refreshToken cookie on the response. It does not return access or refresh tokens.',
+  request: {
+    params: registeredResetPasswordTokenParamsSchema,
+    body: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: registeredResetPasswordSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description:
+        'Password reset, reset token consumed, active sessions revoked, and refreshToken cookie cleared.',
+      headers: {
+        'Set-Cookie': {
+          schema: { type: 'string' },
+          description: 'Clears the refreshToken cookie if present.',
+        },
+      },
+      content: {
+        'application/json': {
+          schema: emptySuccessResponseSchema,
+        },
+      },
+    },
+    400: {
+      description:
+        'Token path parameter or password reset request body is malformed.',
       content: {
         'application/json': {
           schema: errorResponseSchema,
