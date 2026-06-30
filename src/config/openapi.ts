@@ -6,6 +6,7 @@ import { z } from 'zod'
 import {
   changePasswordSchema,
   editUserDetailsSchema,
+  forgotPasswordSchema,
   loginSchema,
 } from '../modules/auth/auth.schemas'
 
@@ -123,6 +124,10 @@ const registeredEditUserDetailsSchema = registry.register(
 const registeredChangePasswordSchema = registry.register(
   'ChangePasswordRequest',
   changePasswordSchema,
+)
+const registeredForgotPasswordSchema = registry.register(
+  'ForgotPasswordRequest',
+  forgotPasswordSchema,
 )
 const refreshCookieParameter = z.object({
   refreshToken: z
@@ -242,6 +247,44 @@ registry.registerPath({
     },
     403: {
       description: 'Account is not active.',
+      content: {
+        'application/json': {
+          schema: errorResponseSchema,
+        },
+      },
+    },
+  },
+})
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/v1/auth/forgot-password',
+  tags: ['Auth'],
+  summary: 'Request a password reset link',
+  description:
+    'Accepts a staff email address and always returns a generic success response. For active accounts only, the service creates a hashed single-use reset token and sends the raw token only inside the frontend reset-password email link.',
+  request: {
+    body: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: registeredForgotPasswordSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description:
+        'Generic response returned whether or not an active account exists.',
+      content: {
+        'application/json': {
+          schema: emptySuccessResponseSchema,
+        },
+      },
+    },
+    400: {
+      description: 'Request validation failed.',
       content: {
         'application/json': {
           schema: errorResponseSchema,

@@ -23,6 +23,7 @@ vi.mock('../src/modules/auth/auth.service', () => ({
     UserDetails: vi.fn(),
     EditUserDetails: vi.fn(),
     ChangePassword: vi.fn(),
+    ForgotPassword: vi.fn(),
   },
 }))
 
@@ -266,6 +267,49 @@ describe('POST /api/v1/auth/refresh', () => {
       code: 'UNAUTHORIZED',
     })
     expect(AuthService.Refresh).not.toHaveBeenCalled()
+  })
+})
+
+describe('POST /api/v1/auth/forgot-password', () => {
+  const testApp: Express = app
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(AuthService.ForgotPassword).mockResolvedValue(undefined)
+  })
+
+  it('returns a generic success response and passes the email to the service', async () => {
+    const response = await request(testApp)
+      .post('/api/v1/auth/forgot-password')
+      .send({ email: 'admin@example.com' })
+      .expect(200)
+
+    expect(response.body).toMatchObject({
+      success: true,
+      message:
+        'If an active account exists for that email, a password reset link has been sent',
+      meta: {
+        requestId: expect.any(String) as string,
+      },
+    })
+    expect(AuthService.ForgotPassword).toHaveBeenCalledWith({
+      email: 'admin@example.com',
+    })
+  })
+
+  it('rejects invalid email requests before calling the service', async () => {
+    const response = await request(testApp)
+      .post('/api/v1/auth/forgot-password')
+      .send({ email: 'not-an-email' })
+      .expect(400)
+
+    const responseBody = response.body as unknown as ErrorResponseBody
+
+    expect(responseBody.error).toMatchObject({
+      message: 'Validation failed',
+      code: 'VALIDATION_ERROR',
+    })
+    expect(AuthService.ForgotPassword).not.toHaveBeenCalled()
   })
 })
 

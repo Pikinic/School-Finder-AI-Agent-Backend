@@ -8,7 +8,7 @@ const loginSchema = z.object({
   password: z.string().min(8),
 })
 
-const forgetPasswordSchema = z.object({
+const forgotPasswordSchema = z.object({
   email: z.string().trim().min(2).max(160).email(),
 })
 
@@ -40,9 +40,10 @@ const changePasswordSchema = z
     message: 'Passwords do not match',
     path: ['confirmNewPassword'],
   })
+
 export {
   loginSchema,
-  forgetPasswordSchema,
+  forgotPasswordSchema,
   refreshTokenSchema,
   editUserDetailsSchema,
   changePasswordSchema,

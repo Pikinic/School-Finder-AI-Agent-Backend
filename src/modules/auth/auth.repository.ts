@@ -4,6 +4,7 @@ import type {
   AuthSessionDbData,
   ChangePasswordTransactionData,
   EditUserDetailsT,
+  PasswordResetTokenDbData,
   RotateRefreshTokenData,
 } from './auth.types'
 
@@ -138,6 +139,32 @@ class AuthRepo {
       })
 
       return updatedUser
+    })
+  }
+
+  static async createPasswordResetToken(data: PasswordResetTokenDbData) {
+    return prisma.$transaction(async (tx) => {
+      await tx.password_Reset_Tokens.updateMany({
+        where: {
+          user_id: data.userId,
+          used_at: null,
+        },
+        data: {
+          used_at: new Date(),
+        },
+      })
+
+      return tx.password_Reset_Tokens.create({
+        data: {
+          user_id: data.userId,
+          token_hash: data.tokenHash,
+          expires_at: data.expiresAt,
+        },
+        select: {
+          id: true,
+          expires_at: true,
+        },
+      })
     })
   }
 }

@@ -2,10 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AUTH_ERROR_CODES } from '../src/common/errors/errorCodes'
 import { hashPassword, verifyPassword } from '../src/common/security/password'
 import {
+  generateOpaqueToken,
+  hashOpaqueToken,
+} from '../src/common/security/opaqueToken'
+import {
   generateAcessToken,
   generateRefreshToken,
 } from '../src/common/security/token'
 import { hashRefreshToken } from '../src/common/security/tokenHash'
+import EmailProvider from '../src/integrations/email/email.provider'
 import AuthRepo from '../src/modules/auth/auth.repository'
 import AuthService from '../src/modules/auth/auth.service'
 
@@ -21,7 +26,13 @@ vi.mock('../src/modules/auth/auth.repository', () => ({
     findAuthSessionById: vi.fn(),
     updateUserDetails: vi.fn(),
     changePasswordAndRotateSessions: vi.fn(),
+    createPasswordResetToken: vi.fn(),
   },
+}))
+
+vi.mock('../src/common/security/opaqueToken', () => ({
+  generateOpaqueToken: vi.fn(),
+  hashOpaqueToken: vi.fn(),
 }))
 
 vi.mock('../src/common/security/password', () => ({
@@ -38,12 +49,29 @@ vi.mock('../src/common/security/tokenHash', () => ({
   hashRefreshToken: vi.fn(),
 }))
 
+vi.mock('../src/integrations/email/email.provider', () => ({
+  default: {
+    send: vi.fn(),
+  },
+}))
+
+vi.mock('../src/config/logger', () => ({
+  logger: {
+    error: vi.fn(),
+    info: vi.fn(),
+  },
+  httpLogger: vi.fn((_req, _res, next: () => void) => next()),
+}))
+
 const authRepoMock = vi.mocked(AuthRepo)
+const generateOpaqueTokenMock = vi.mocked(generateOpaqueToken)
+const hashOpaqueTokenMock = vi.mocked(hashOpaqueToken)
 const hashPasswordMock = vi.mocked(hashPassword)
 const verifyPasswordMock = vi.mocked(verifyPassword)
 const generateAcessTokenMock = vi.mocked(generateAcessToken)
 const generateRefreshTokenMock = vi.mocked(generateRefreshToken)
 const hashRefreshTokenMock = vi.mocked(hashRefreshToken)
+const emailProviderMock = vi.mocked(EmailProvider)
 
 const activeUser = {
   id: '78bd6894-d3d7-405b-9443-17d376b50db1',
@@ -684,5 +712,85 @@ describe('AuthService.ChangePassword', () => {
     })
     expect(hashPasswordMock).not.toHaveBeenCalled()
     expect(authRepoMock.changePasswordAndRotateSessions).not.toHaveBeenCalled()
+  })
+})
+
+describe('AuthService.ForgotPassword', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-06-22T00:00:00.000Z'))
+
+    authRepoMock.findUser.mockResolvedValue(activeUser)
+    authRepoMock.createPasswordResetToken.mockResolvedValue({
+      id: 'reset-token-id',
+      expires_at: new Date('2026-06-22T01:00:00.000Z'),
+    })
+    generateOpaqueTokenMock.mockReturnValue('raw-reset-token')
+    hashOpaqueTokenMock.mockReturnValue('hashed-reset-token')
+    emailProviderMock.send.mockResolvedValue(undefined)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('creates a hashed reset token and sends the reset email for active users', async () => {
+    await AuthService.ForgotPassword({ email: ' ADMIN@example.com ' })
+
+    expect(authRepoMock.findUser).toHaveBeenCalledWith({
+      email: 'admin@example.com',
+    })
+    expect(generateOpaqueTokenMock).toHaveBeenCalled()
+    expect(hashOpaqueTokenMock).toHaveBeenCalledWith('raw-reset-token')
+    expect(authRepoMock.createPasswordResetToken).toHaveBeenCalledWith({
+      userId: activeUser.id,
+      tokenHash: 'hashed-reset-token',
+      expiresAt: new Date('2026-06-22T01:00:00.000Z'),
+    })
+    expect(emailProviderMock.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: activeUser.email,
+        subject: 'Reset your School Finder AI password',
+        html: expect.stringContaining(
+          '/reset-password/raw-reset-token',
+        ) as string,
+        text: expect.stringContaining(
+          '/reset-password/raw-reset-token',
+        ) as string,
+      }),
+    )
+  })
+
+  it('does not create a token for unknown users', async () => {
+    authRepoMock.findUser.mockResolvedValue(null)
+
+    await AuthService.ForgotPassword({ email: 'missing@example.com' })
+
+    expect(authRepoMock.createPasswordResetToken).not.toHaveBeenCalled()
+    expect(emailProviderMock.send).not.toHaveBeenCalled()
+  })
+
+  it('does not create a token for inactive users', async () => {
+    authRepoMock.findUser.mockResolvedValue({
+      ...activeUser,
+      status: 'DISABLED',
+    })
+
+    await AuthService.ForgotPassword({ email: 'admin@example.com' })
+
+    expect(authRepoMock.createPasswordResetToken).not.toHaveBeenCalled()
+    expect(emailProviderMock.send).not.toHaveBeenCalled()
+  })
+
+  it('does not expose email delivery failures to the caller', async () => {
+    emailProviderMock.send.mockRejectedValue(new Error('smtp unavailable'))
+
+    await expect(
+      AuthService.ForgotPassword({ email: 'admin@example.com' }),
+    ).resolves.toBeUndefined()
+
+    expect(authRepoMock.createPasswordResetToken).toHaveBeenCalled()
+    expect(emailProviderMock.send).toHaveBeenCalled()
   })
 })

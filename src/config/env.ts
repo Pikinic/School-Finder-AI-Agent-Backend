@@ -22,6 +22,14 @@ const env = {
   cookieSecret: getEnv('COOKIE_SECRET'),
   jwtSecret: getEnv('JWT_SECRET'),
   docsEnabled: docsEnabled === 'true',
+  frontendUrl: getEnv('FRONTEND_URL', false) || 'http://localhost:5173',
+  smtpHost: getEnv('SMTP_HOST', false),
+  smtpPort: parseInt(getEnv('SMTP_PORT', false) || '587', 10),
+  smtpSecure: (getEnv('SMTP_SECURE', false) || 'false') === 'true',
+  smtpUser: getEnv('SMTP_USER', false),
+  smtpPassword: getEnv('SMTP_PASSWORD', false),
+  emailFrom:
+    getEnv('EMAIL_FROM', false) || 'School Finder AI <no-reply@example.com>',
 }
 
 export default env

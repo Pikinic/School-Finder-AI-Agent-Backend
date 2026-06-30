@@ -2,8 +2,9 @@ import express, { type Router } from 'express'
 import { validate, validateRefreshToken } from '../../middleware/validate'
 import AuthController from './auth.controller'
 import {
-  editUserDetailsSchema,
   changePasswordSchema,
+  editUserDetailsSchema,
+  forgotPasswordSchema,
   loginSchema,
   refreshTokenSchema,
 } from './auth.schemas'
@@ -50,4 +51,10 @@ authRouter.post(
   validate(changePasswordSchema),
   AuthenticateMiddleware,
   AuthController.ChangePassword,
+)
+
+authRouter.post(
+  '/forgot-password',
+  validate(forgotPasswordSchema),
+  AuthController.ForgotPassword,
 )

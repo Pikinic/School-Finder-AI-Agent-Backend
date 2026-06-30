@@ -5,6 +5,7 @@ import AuthService from './auth.service'
 import type {
   ChangePasswordData,
   EditUserDetailsT,
+  ForgotPasswordData,
   LoginT,
   RefreshT,
 } from './auth.types'
@@ -174,6 +175,28 @@ class AuthController {
           { requestId: req.id },
         ),
       )
+    } catch (error) {
+      next(error)
+    }
+  }
+
+  static ForgotPassword = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    try {
+      await AuthService.ForgotPassword(req.body as ForgotPasswordData)
+      res
+        .status(200)
+        .send(
+          successResponse(
+            true,
+            'If an active account exists for that email, a password reset link has been sent',
+            undefined,
+            { requestId: req.id },
+          ),
+        )
     } catch (error) {
       next(error)
     }

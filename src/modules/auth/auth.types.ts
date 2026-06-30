@@ -57,3 +57,13 @@ export type ChangePasswordTransactionData = {
   currentTokenVersion: number
   changedAt: Date
 }
+
+export type ForgotPasswordData = {
+  email: string
+}
+
+export type PasswordResetTokenDbData = {
+  userId: string
+  tokenHash: string
+  expiresAt: Date
+}

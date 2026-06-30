@@ -1,12 +1,20 @@
 import { randomUUID } from 'node:crypto'
 import { AUTH_ERROR_CODES } from '../../common/errors/errorCodes'
 import { createError } from '../../common/errors/AppError'
+import {
+  generateOpaqueToken,
+  hashOpaqueToken,
+} from '../../common/security/opaqueToken'
 import { hashPassword, verifyPassword } from '../../common/security/password'
 import {
   generateAcessToken,
   generateRefreshToken,
 } from '../../common/security/token'
 import { hashRefreshToken } from '../../common/security/tokenHash'
+import env from '../../config/env'
+import { logger } from '../../config/logger'
+import EmailProvider from '../../integrations/email/email.provider'
+import { buildPasswordResetEmail } from '../../integrations/email/email.templates'
 import AuthRepo from './auth.repository'
 import type {
   AccessTokenClaims,
@@ -16,9 +24,11 @@ import type {
   EditUserDetailsT,
   LoginT,
   RefreshT,
+  ForgotPasswordData,
 } from './auth.types'
 
 const passwordPolicyRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/
+const passwordResetTokenTtlMinutes = 60
 
 const toSafeUser = (user: {
   public_id: string
@@ -372,6 +382,52 @@ class AuthService {
       user: toSafeUser(updatedUser),
       accessToken,
       refreshToken: newRefreshToken,
+    }
+  }
+
+  static ForgotPassword = async (data: ForgotPasswordData) => {
+    const email = data.email.trim().toLowerCase()
+    const user = await AuthRepo.findUser({ email })
+
+    if (!user || user.status !== 'ACTIVE') {
+      return
+    }
+
+    const resetToken = generateOpaqueToken()
+    const tokenHash = hashOpaqueToken(resetToken)
+    const expiresAt = new Date(
+      Date.now() + passwordResetTokenTtlMinutes * 60 * 1000,
+    )
+
+    await AuthRepo.createPasswordResetToken({
+      userId: user.id,
+      tokenHash,
+      expiresAt,
+    })
+
+    const resetUrl = new URL(`/reset-password/${resetToken}`, env.frontendUrl)
+      .href
+ 
+    try {
+      await EmailProvider.send(
+        buildPasswordResetEmail({
+          to: user.email,
+          fullName: user.full_name,
+          resetUrl,
+          expiresInMinutes: passwordResetTokenTtlMinutes,
+        }),
+      )
+
+    console.log(resetUrl, "copy url")
+    } catch (error) {
+      logger.error(
+        {
+          err: error,
+          userId: user.id,
+          resetTokenExpiresAt: expiresAt,
+        },
+        'Password reset email delivery failed',
+      )
     }
   }
 }
