@@ -1,5 +1,9 @@
 import express, { type Router } from 'express'
-import { validate, validateRefreshToken } from '../../middleware/validate'
+import {
+  validate,
+  validateParams,
+  validateRefreshToken,
+} from '../../middleware/validate'
 import AuthController from './auth.controller'
 import {
   changePasswordSchema,
@@ -7,6 +11,7 @@ import {
   forgotPasswordSchema,
   loginSchema,
   refreshTokenSchema,
+  resetPasswordTokenParamsSchema,
 } from './auth.schemas'
 import { clientInfo } from '../../middleware/clientInfo'
 import { AuthenticateMiddleware } from '../../middleware/authenticate'
@@ -57,4 +62,10 @@ authRouter.post(
   '/forgot-password',
   validate(forgotPasswordSchema),
   AuthController.ForgotPassword,
+)
+
+authRouter.get(
+  '/reset-password/:token',
+  validateParams(resetPasswordTokenParamsSchema),
+  AuthController.VerifyResetPasswordToken,
 )

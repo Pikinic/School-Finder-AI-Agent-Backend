@@ -27,6 +27,7 @@ vi.mock('../src/modules/auth/auth.repository', () => ({
     updateUserDetails: vi.fn(),
     changePasswordAndRotateSessions: vi.fn(),
     createPasswordResetToken: vi.fn(),
+    findPasswordResetTokenByHash: vi.fn(),
   },
 }))
 
@@ -792,5 +793,116 @@ describe('AuthService.ForgotPassword', () => {
 
     expect(authRepoMock.createPasswordResetToken).toHaveBeenCalled()
     expect(emailProviderMock.send).toHaveBeenCalled()
+  })
+})
+
+describe('AuthService.VerifyResetPasswordToken', () => {
+  const resetTokenRecord = {
+    id: 'reset-token-id',
+    user_id: activeUser.id,
+    token_hash: 'hashed-reset-token',
+    expires_at: new Date('2026-06-22T01:00:00.000Z'),
+    used_at: null,
+    created_at: new Date('2026-06-22T00:00:00.000Z'),
+    user: activeUser,
+  } as const
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-06-22T00:30:00.000Z'))
+
+    hashOpaqueTokenMock.mockReturnValue('hashed-reset-token')
+    authRepoMock.findPasswordResetTokenByHash.mockResolvedValue(
+      resetTokenRecord,
+    )
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('hashes the reset token and returns only minimal public state', async () => {
+    const result = await AuthService.VerifyResetPasswordToken('a'.repeat(128))
+
+    expect(hashOpaqueTokenMock).toHaveBeenCalledWith('a'.repeat(128))
+    expect(authRepoMock.findPasswordResetTokenByHash).toHaveBeenCalledWith(
+      'hashed-reset-token',
+    )
+    expect(result).toEqual({
+      email: activeUser.email,
+      fullName: activeUser.full_name,
+    })
+    expect(result).not.toHaveProperty('id')
+    expect(result).not.toHaveProperty('token_hash')
+    expect(result).not.toHaveProperty('status')
+  })
+
+  it('rejects malformed tokens before hashing', async () => {
+    await expect(
+      AuthService.VerifyResetPasswordToken('not-a-reset-token'),
+    ).rejects.toMatchObject({
+      statusCode: 401,
+      code: AUTH_ERROR_CODES.TOKEN_INVALID,
+    })
+
+    expect(hashOpaqueTokenMock).not.toHaveBeenCalled()
+    expect(authRepoMock.findPasswordResetTokenByHash).not.toHaveBeenCalled()
+  })
+
+  it('rejects unknown reset tokens', async () => {
+    authRepoMock.findPasswordResetTokenByHash.mockResolvedValue(null)
+
+    await expect(
+      AuthService.VerifyResetPasswordToken('a'.repeat(128)),
+    ).rejects.toMatchObject({
+      statusCode: 401,
+      code: AUTH_ERROR_CODES.TOKEN_INVALID,
+    })
+  })
+
+  it('rejects used reset tokens', async () => {
+    authRepoMock.findPasswordResetTokenByHash.mockResolvedValue({
+      ...resetTokenRecord,
+      used_at: new Date('2026-06-22T00:15:00.000Z'),
+    })
+
+    await expect(
+      AuthService.VerifyResetPasswordToken('a'.repeat(128)),
+    ).rejects.toMatchObject({
+      statusCode: 401,
+      code: AUTH_ERROR_CODES.TOKEN_INVALID,
+    })
+  })
+
+  it('rejects expired reset tokens', async () => {
+    authRepoMock.findPasswordResetTokenByHash.mockResolvedValue({
+      ...resetTokenRecord,
+      expires_at: new Date('2026-06-22T00:00:00.000Z'),
+    })
+
+    await expect(
+      AuthService.VerifyResetPasswordToken('a'.repeat(128)),
+    ).rejects.toMatchObject({
+      statusCode: 401,
+      code: AUTH_ERROR_CODES.TOKEN_EXPIRED,
+    })
+  })
+
+  it('rejects reset tokens for inactive users', async () => {
+    authRepoMock.findPasswordResetTokenByHash.mockResolvedValue({
+      ...resetTokenRecord,
+      user: {
+        ...activeUser,
+        status: 'DISABLED',
+      },
+    })
+
+    await expect(
+      AuthService.VerifyResetPasswordToken('a'.repeat(128)),
+    ).rejects.toMatchObject({
+      statusCode: 403,
+      code: AUTH_ERROR_CODES.ACCOUNT_DISABLED,
+    })
   })
 })

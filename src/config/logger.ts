@@ -21,6 +21,13 @@ const loggerOptions: pino.LoggerOptions = {
   },
 }
 
+const sanitizeLoggedUrl = (url: string | undefined) => {
+  return url?.replace(
+    /\/api\/v1\/auth\/reset-password\/[^/?#]+/g,
+    '/api/v1/auth/reset-password/[REDACTED]',
+  )
+}
+
 if (env.nodeEnv === 'development') {
   loggerOptions.transport = {
     target: 'pino-pretty',
@@ -35,6 +42,16 @@ export const logger = pino(loggerOptions)
 
 export const httpLogger = pinoHttp<Request, Response>({
   logger,
+  serializers: {
+    req(req: Request) {
+      const serializedRequest = pino.stdSerializers.req(req)
+
+      return {
+        ...serializedRequest,
+        url: sanitizeLoggedUrl(serializedRequest.url),
+      }
+    },
+  },
   genReqId: (req) => req.id,
   customProps: (req) => ({
     requestId: req.id,

@@ -25,10 +25,12 @@ import type {
   LoginT,
   RefreshT,
   ForgotPasswordData,
+  VerifiedResetPasswordToken,
 } from './auth.types'
 
 const passwordPolicyRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/
 const passwordResetTokenTtlMinutes = 60
+const opaqueTokenRegex = /^[a-f0-9]{128}$/i
 
 const toSafeUser = (user: {
   public_id: string
@@ -407,7 +409,7 @@ class AuthService {
 
     const resetUrl = new URL(`/reset-password/${resetToken}`, env.frontendUrl)
       .href
- 
+
     try {
       await EmailProvider.send(
         buildPasswordResetEmail({
@@ -417,8 +419,6 @@ class AuthService {
           expiresInMinutes: passwordResetTokenTtlMinutes,
         }),
       )
-
-    console.log(resetUrl, "copy url")
     } catch (error) {
       logger.error(
         {
@@ -428,6 +428,63 @@ class AuthService {
         },
         'Password reset email delivery failed',
       )
+    }
+  }
+
+  static VerifyResetPasswordToken = async (
+    token: string,
+  ): Promise<VerifiedResetPasswordToken> => {
+    if (!token || !opaqueTokenRegex.test(token)) {
+      throw createError(
+        'Password reset token is invalid',
+        401,
+        {},
+        AUTH_ERROR_CODES.TOKEN_INVALID,
+      )
+    }
+
+    const tokenHash = hashOpaqueToken(token)
+    const resetToken = await AuthRepo.findPasswordResetTokenByHash(tokenHash)
+
+    if (!resetToken || resetToken.used_at) {
+      throw createError(
+        'Password reset token is invalid',
+        401,
+        {},
+        AUTH_ERROR_CODES.TOKEN_INVALID,
+      )
+    }
+
+    if (resetToken.expires_at <= new Date()) {
+      throw createError(
+        'Password reset token has expired',
+        401,
+        {},
+        AUTH_ERROR_CODES.TOKEN_EXPIRED,
+      )
+    }
+
+    if (resetToken.user.status !== 'ACTIVE') {
+      throw createError(
+        'Account is not active',
+        403,
+        {},
+        AUTH_ERROR_CODES.ACCOUNT_DISABLED,
+      )
+    }
+
+    logger.info(
+      {
+        userId: resetToken.user_id,
+        passwordResetTokenId: resetToken.id,
+        resetTokenExpiresAt: resetToken.expires_at,
+      },
+      'Password reset token verified',
+    )
+
+    return {
+      email: resetToken.user.email,
+      fullName: resetToken.user.full_name,
     }
   }
 }

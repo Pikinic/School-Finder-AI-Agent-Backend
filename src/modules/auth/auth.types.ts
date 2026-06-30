@@ -67,3 +67,8 @@ export type PasswordResetTokenDbData = {
   tokenHash: string
   expiresAt: Date
 }
+
+export type VerifiedResetPasswordToken = {
+  email: string
+  fullName: string
+}

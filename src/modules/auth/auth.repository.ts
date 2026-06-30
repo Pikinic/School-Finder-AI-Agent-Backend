@@ -167,6 +167,15 @@ class AuthRepo {
       })
     })
   }
+
+  static async findPasswordResetTokenByHash(tokenHash: string) {
+    return prisma.password_Reset_Tokens.findUnique({
+      where: { token_hash: tokenHash },
+      include: {
+        user: true,
+      },
+    })
+  }
 }
 
 export default AuthRepo

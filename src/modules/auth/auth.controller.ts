@@ -201,6 +201,26 @@ class AuthController {
       next(error)
     }
   }
+  static VerifyResetPasswordToken = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    try {
+      const { token } = req.params
+      const verifiedToken = await AuthService.VerifyResetPasswordToken(
+        token as string,
+      )
+
+      res.status(200).send(
+        successResponse(true, 'Password reset token is valid', verifiedToken, {
+          requestId: req.id,
+        }),
+      )
+    } catch (error) {
+      next(error)
+    }
+  }
 }
 
 export default AuthController

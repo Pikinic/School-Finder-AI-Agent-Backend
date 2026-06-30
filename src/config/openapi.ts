@@ -8,6 +8,7 @@ import {
   editUserDetailsSchema,
   forgotPasswordSchema,
   loginSchema,
+  resetPasswordTokenParamsSchema,
 } from '../modules/auth/auth.schemas'
 
 const registry = new OpenAPIRegistry()
@@ -77,6 +78,21 @@ const emptySuccessResponseSchema = registry.register(
   }),
 )
 
+const verifyResetPasswordTokenResponseSchema = registry.register(
+  'VerifyResetPasswordTokenResponse',
+  z.object({
+    success: z.literal(true),
+    message: z.string(),
+    data: z.object({
+      email: z.string().email(),
+      fullName: z.string(),
+    }),
+    meta: z.object({
+      requestId: z.string(),
+    }),
+  }),
+)
+
 const safeUserSchema = z.object({
   public_id: z.string(),
   full_name: z.string(),
@@ -128,6 +144,10 @@ const registeredChangePasswordSchema = registry.register(
 const registeredForgotPasswordSchema = registry.register(
   'ForgotPasswordRequest',
   forgotPasswordSchema,
+)
+const registeredResetPasswordTokenParamsSchema = registry.register(
+  'ResetPasswordTokenParams',
+  resetPasswordTokenParamsSchema,
 )
 const refreshCookieParameter = z.object({
   refreshToken: z
@@ -285,6 +305,51 @@ registry.registerPath({
     },
     400: {
       description: 'Request validation failed.',
+      content: {
+        'application/json': {
+          schema: errorResponseSchema,
+        },
+      },
+    },
+  },
+})
+registry.registerPath({
+  method: 'get',
+  path: '/api/v1/auth/reset-password/{token}',
+  tags: ['Auth'],
+  summary: 'Verify a password reset token',
+  description:
+    'Validates a password-reset token from the frontend reset link. The raw token is hashed before lookup. The response returns only minimal public user state needed to render the reset form; it does not expose token hashes, token IDs, internal user IDs, account status, or password metadata.',
+  request: {
+    params: registeredResetPasswordTokenParamsSchema,
+  },
+  responses: {
+    200: {
+      description: 'Password reset token is valid and still usable.',
+      content: {
+        'application/json': {
+          schema: verifyResetPasswordTokenResponseSchema,
+        },
+      },
+    },
+    400: {
+      description: 'Token path parameter is malformed.',
+      content: {
+        'application/json': {
+          schema: errorResponseSchema,
+        },
+      },
+    },
+    401: {
+      description: 'Token was not found, has already been used, or expired.',
+      content: {
+        'application/json': {
+          schema: errorResponseSchema,
+        },
+      },
+    },
+    403: {
+      description: 'The account is no longer active.',
       content: {
         'application/json': {
           schema: errorResponseSchema,

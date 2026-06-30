@@ -12,6 +12,13 @@ const forgotPasswordSchema = z.object({
   email: z.string().trim().min(2).max(160).email(),
 })
 
+const resetPasswordTokenParamsSchema = z.object({
+  token: z
+    .string()
+    .trim()
+    .regex(/^[a-f0-9]{128}$/i),
+})
+
 const refreshTokenSchema = z.object({
   refreshToken: z.string().trim().length(128),
 })
@@ -44,6 +51,7 @@ const changePasswordSchema = z
 export {
   loginSchema,
   forgotPasswordSchema,
+  resetPasswordTokenParamsSchema,
   refreshTokenSchema,
   editUserDetailsSchema,
   changePasswordSchema,

@@ -22,6 +22,25 @@ export const validate =
     next()
   }
 
+export const validateParams =
+  (schema: z.ZodType) => (req: Request, _res: Response, next: NextFunction) => {
+    const requestEnvironment = schema.safeParse(req.params)
+
+    if (!requestEnvironment.success) {
+      return next(
+        createError(
+          'Validation failed',
+          400,
+          { issues: requestEnvironment.error.issues },
+          'VALIDATION_ERROR',
+        ),
+      )
+    }
+
+    req.params = requestEnvironment.data as typeof req.params
+    next()
+  }
+
 export const validateRefreshToken =
   (schema: z.ZodObject) =>
   (req: Request, _res: Response, next: NextFunction) => {

@@ -24,6 +24,7 @@ vi.mock('../src/modules/auth/auth.service', () => ({
     EditUserDetails: vi.fn(),
     ChangePassword: vi.fn(),
     ForgotPassword: vi.fn(),
+    VerifyResetPasswordToken: vi.fn(),
   },
 }))
 
@@ -78,6 +79,18 @@ type ChangePasswordResponseBody = {
       email: string
       role: string
     }
+  }
+  meta: {
+    requestId: unknown
+  }
+}
+
+type VerifyResetPasswordTokenResponseBody = {
+  success: boolean
+  message: string
+  data: {
+    email: string
+    fullName: string
   }
   meta: {
     requestId: unknown
@@ -310,6 +323,56 @@ describe('POST /api/v1/auth/forgot-password', () => {
       code: 'VALIDATION_ERROR',
     })
     expect(AuthService.ForgotPassword).not.toHaveBeenCalled()
+  })
+})
+
+describe('GET /api/v1/auth/reset-password/:token', () => {
+  const testApp: Express = app
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(AuthService.VerifyResetPasswordToken).mockResolvedValue({
+      email: 'admin@example.com',
+      fullName: 'Admin User',
+    })
+  })
+
+  it('verifies the reset token and returns minimal public user state', async () => {
+    const token = 'a'.repeat(128)
+
+    const response = await request(testApp)
+      .get(`/api/v1/auth/reset-password/${token}`)
+      .expect(200)
+
+    const responseBody =
+      response.body as unknown as VerifyResetPasswordTokenResponseBody
+
+    expect(responseBody).toMatchObject({
+      success: true,
+      message: 'Password reset token is valid',
+      data: {
+        email: 'admin@example.com',
+        fullName: 'Admin User',
+      },
+    })
+    expect(typeof responseBody.meta.requestId).toBe('string')
+    expect(responseBody.data).not.toHaveProperty('id')
+    expect(responseBody.data).not.toHaveProperty('status')
+    expect(AuthService.VerifyResetPasswordToken).toHaveBeenCalledWith(token)
+  })
+
+  it('rejects malformed reset tokens before calling the service', async () => {
+    const response = await request(testApp)
+      .get('/api/v1/auth/reset-password/not-a-token')
+      .expect(400)
+
+    const responseBody = response.body as unknown as ErrorResponseBody
+
+    expect(responseBody.error).toMatchObject({
+      message: 'Validation failed',
+      code: 'VALIDATION_ERROR',
+    })
+    expect(AuthService.VerifyResetPasswordToken).not.toHaveBeenCalled()
   })
 })
 
