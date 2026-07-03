@@ -43,6 +43,11 @@ model Users {
   auth_sessions         Auth_Sessions[]
   password_reset_tokens Password_Reset_Tokens[]
 
+
+  // NEW
+  invitations_received Team_Invitations[] @relation("InvitationRecipient")
+  invitations_sent     Team_Invitations[] @relation("InvitationSender")
+
   @@map("users")
 }
 
@@ -81,4 +86,32 @@ model Password_Reset_Tokens {
   @@index([user_id])
   @@index([expires_at])
   @@map("password_reset_tokens")
+}
+
+
+model Team_Invitations {
+  id                  String    @id @default(uuid()) @db.Uuid
+
+  user_id             String    @db.Uuid
+  invited_by_user_id  String    @db.Uuid
+
+  token_hash          String    @unique @db.Char(64)
+
+  expires_at          DateTime  @db.Timestamptz(6)
+  accepted_at         DateTime?
+  canceled_at         DateTime?
+  
+  sent_at             DateTime  @default(now()) @db.Timestamptz(6)
+  last_sent_at        DateTime  @default(now()) @db.Timestamptz(6)
+  send_count          Int       @default(1)
+
+  // The invited user
+  user Users @relation( "InvitationRecipient", fields: [user_id], references: [id], onDelete: Cascade)
+
+  // The admin/staff who sent the invitation
+  invited_by Users @relation("InvitationSender", fields: [invited_by_user_id], references: [id])
+
+  @@index([user_id])
+  @@index([invited_by_user_id])
+  @@map("team_invitations")
 }

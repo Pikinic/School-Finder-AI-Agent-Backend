@@ -49,6 +49,7 @@ class AuthController {
       next(error)
     }
   }
+
   static Logout = async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.auth) {
@@ -202,6 +203,7 @@ class AuthController {
       next(error)
     }
   }
+  
   static VerifyResetPasswordToken = async (
     req: Request,
     res: Response,
