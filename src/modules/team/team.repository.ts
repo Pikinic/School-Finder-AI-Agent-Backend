@@ -30,6 +30,20 @@ class TeamRepo {
       return {user, invite}
     })
 }
+   static async FindTeamInvitation (tokenHash:string){
+        return await prisma.team_Invitations.findUnique({
+            where:{
+                token_hash:tokenHash
+            },
+           include:{
+            user:true
+           }
+        })
+
+
+    }
+
+    
 }
 
 export default TeamRepo
