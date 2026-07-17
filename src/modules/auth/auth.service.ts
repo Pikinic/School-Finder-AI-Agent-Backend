@@ -579,8 +579,8 @@ class AuthService {
       'Password reset completed',
     )
   }
-  static VerifyInvitationToken = async (token:string)=>{
-      if (!token || !opaqueTokenRegex.test(token)) {
+  static VerifyInvitationToken = async (token: string) => {
+    if (!token || !opaqueTokenRegex.test(token)) {
       throw createError(
         'Invitation token is invalid',
         401,
@@ -589,49 +589,56 @@ class AuthService {
       )
     }
 
-     const tokenHash = hashOpaqueToken(token)
-     const invitationToken = await TeamRepo.FindTeamInvitation(tokenHash)
-   
-     
-     
-     if(!invitationToken || invitationToken.accepted_at || invitationToken.canceled_at){
-        throw createError(
+    const tokenHash = hashOpaqueToken(token)
+    const invitationToken = await TeamRepo.FindTeamInvitation({
+      token_hash: tokenHash,
+    })
+
+    if (
+      !invitationToken ||
+      invitationToken.accepted_at ||
+      invitationToken.canceled_at
+    ) {
+      throw createError(
         'Invitation token is invalid',
         401,
         {},
         AUTH_ERROR_CODES.TOKEN_INVALID,
       )
-     }
+    }
 
-     if (invitationToken.expires_at <= new Date()){
-          throw createError(
+    if (invitationToken.expires_at <= new Date()) {
+      throw createError(
         'Invitation token has expired',
         401,
         {},
         AUTH_ERROR_CODES.TOKEN_EXPIRED,
       )
-     }
+    }
 
-     logger.info({
-        userId:invitationToken.user_id,
-        invitationTokenId:invitationToken.id,
-      invitationExpiresAt:invitationToken.expires_at
-     },
-     'Invitation rest token verified'
-      )
-    
-      return {
-        name:invitationToken.user.full_name,
-        email:invitationToken.user.email
-      }
-   
+    logger.info(
+      {
+        userId: invitationToken.user_id,
+        invitationTokenId: invitationToken.id,
+        invitationExpiresAt: invitationToken.expires_at,
+      },
+      'Invitation rest token verified',
+    )
+
+    return {
+      fullName: invitationToken.user.full_name,
+      email: invitationToken.user.email,
+    }
   }
-  static ResetPasswordFromInvitation = async (token:string, data:ResetPasswordData)=>{
+  static ResetPasswordFromInvitation = async (
+    token: string,
+    data: ResetPasswordData,
+  ) => {
     if (data.newPassword !== data.confirmNewPassword) {
       throw createError('Passwords do not match', 400, {}, 'VALIDATION_ERROR')
     }
 
-      if (!passwordPolicyRegex.test(data.newPassword)) {
+    if (!passwordPolicyRegex.test(data.newPassword)) {
       throw createError(
         'Password must be at least 8 characters and include uppercase, lowercase, and number characters',
         400,
@@ -649,38 +656,42 @@ class AuthService {
       )
     }
 
-       const tokenHash = hashOpaqueToken(token)
-       const invitationToken = await TeamRepo.FindTeamInvitation(tokenHash)
-     
-     
-     if(!invitationToken || invitationToken.accepted_at || invitationToken.canceled_at){
-        throw createError(
+    const tokenHash = hashOpaqueToken(token)
+    const invitationToken = await TeamRepo.FindTeamInvitation({
+      token_hash: tokenHash,
+    })
+
+    if (
+      !invitationToken ||
+      invitationToken.accepted_at ||
+      invitationToken.canceled_at
+    ) {
+      throw createError(
         'Invitation token is invalid',
         401,
         {},
         AUTH_ERROR_CODES.TOKEN_INVALID,
       )
-     }
+    }
 
-     if(invitationToken.expires_at <= new Date()){
+    if (invitationToken.expires_at <= new Date()) {
       throw createError(
         'Invitation token has expired',
-        401,  
+        401,
         {},
         AUTH_ERROR_CODES.TOKEN_EXPIRED,
       )
     }
 
-    const newPasswordHash =  await hashPassword(data.newPassword)
+    const newPasswordHash = await hashPassword(data.newPassword)
     const acceptedAt = new Date()
 
-     await AuthRepo.UpdateInvitationAndUserPassword({
-      userId:invitationToken.user_id,
+    await AuthRepo.UpdateInvitationAndUserPassword({
+      userId: invitationToken.user_id,
       newPasswordHash,
-      acceptedAt:acceptedAt,
-      invitationId:invitationToken.id
-    }) 
-
+      acceptedAt: acceptedAt,
+      invitationId: invitationToken.id,
+    })
   }
 }
 

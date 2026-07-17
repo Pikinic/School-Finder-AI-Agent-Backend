@@ -1,5 +1,5 @@
-import { randomBytes } from "crypto";
+import { randomBytes } from 'crypto'
 
-export const createPublicUserId = ():string=> {
-  return `USR-${randomBytes(6).toString("hex").toUpperCase()}`;
+export const createPublicUserId = (): string => {
+  return `USR-${randomBytes(6).toString('hex').toUpperCase()}`
 }

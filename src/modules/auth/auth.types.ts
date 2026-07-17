@@ -87,8 +87,8 @@ export type ResetPasswordTransactionData = {
 }
 
 export type UpdateInvitationAndUserPasswordData = {
-    userId:string,
-      newPasswordHash:string,
-      acceptedAt:Date,
-      invitationId:string
+  userId: string
+  newPasswordHash: string
+  acceptedAt: Date
+  invitationId: string
 }

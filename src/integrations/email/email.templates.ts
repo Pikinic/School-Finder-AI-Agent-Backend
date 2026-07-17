@@ -1,4 +1,4 @@
-import { InviteEmailData } from '../../modules/team/team.types'
+import type { InviteEmailData } from '../../modules/team/team.types'
 import type { PasswordResetEmailData, SendEmailData } from './email.types'
 
 const escapeHtml = (value: string): string => {
@@ -80,12 +80,7 @@ export const buildPasswordResetEmail = (
   }
 }
 
-
-
-
-export const buildInviteEmail = (
-  data:InviteEmailData,
-): SendEmailData => {
+export const buildInviteEmail = (data: InviteEmailData): SendEmailData => {
   const fullName = escapeHtml(data.fullName)
   const inviterName = escapeHtml(data.inviterName)
   const inviteUrl = escapeHtml(data.inviteUrl)

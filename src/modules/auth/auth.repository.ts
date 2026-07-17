@@ -225,25 +225,25 @@ class AuthRepo {
     })
   }
 
-  static async UpdateInvitationAndUserPassword(data: UpdateInvitationAndUserPasswordData){
-      await prisma.$transaction(async (tx) => {
-         await tx.users.update({
-            where:{id:data.userId},
-            data:{
-                password_hash:data.newPasswordHash,
-            }
-          })
-   await tx.team_Invitations.update({
-            where:{id:data.invitationId},
-            data:{
-                accepted_at:data.acceptedAt
-            }
-          })
-        
+  static async UpdateInvitationAndUserPassword(
+    data: UpdateInvitationAndUserPasswordData,
+  ) {
+    await prisma.$transaction(async (tx) => {
+      await tx.users.update({
+        where: { id: data.userId },
+        data: {
+          password_hash: data.newPasswordHash,
+          status: 'ACTIVE',
+        },
       })
+      await tx.team_Invitations.update({
+        where: { id: data.invitationId },
+        data: {
+          accepted_at: data.acceptedAt,
+        },
+      })
+    })
   }
-
-  
 }
 
 export default AuthRepo
