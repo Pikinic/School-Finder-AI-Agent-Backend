@@ -63,11 +63,18 @@ class TeamRepo {
     })
   }
 
-  static async CancelInvitation(id: string) {
-    return prisma.team_Invitations.update({
-      where: { id },
-      data: { canceled_at: new Date() },
-    })
+  static async CancelInvitation(id:string, user_id: string) {
+     return prisma.$transaction( async (tx)=>{
+        await tx.team_Invitations.update({
+          where:{id},
+          data:{canceled_at: new Date()}
+        })
+
+        await tx.users.delete({
+          where:{id:user_id}
+        })
+     })
+   
   }
 
   // ── Users ──────────────────────────────────────────────────────────────────
@@ -91,6 +98,7 @@ class TeamRepo {
         ...(data.fullName !== undefined && { full_name: data.fullName }),
         // null is valid for Prisma's nullable VarChar; skip the key entirely when not provided
         ...(data.phone !== undefined && { phone: data.phone ?? null }),
+        ...(data.email !== undefined && { email: data.email }),
       },
     })
   }

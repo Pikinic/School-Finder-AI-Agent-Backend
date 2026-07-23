@@ -36,6 +36,7 @@ type UpdateInvitationData = {
 type UpdateTeamMemberData = {
   fullName?: string
   phone?: string | null
+  email?: string 
 }
 
 type UpdateTeamMemberStatusData = {
